@@ -8,7 +8,7 @@ Goal: allowing easy cross-editor live collaboration
 
 ### Needed for demo
 
-- [ ] server accept multiple client & broadcast change events
+- [x] server accept multiple client & broadcast change events
 - [ ] draw other client cursors
 - [ ] check that there is no possible race conditions that would cause a desync
       in client's documents
