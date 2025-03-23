@@ -1,0 +1,2 @@
+[keys.normal]
+C-r = ":lsp-restart"
