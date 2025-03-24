@@ -13,6 +13,8 @@
       in {
         devShell = pkgs.mkShell {
           buildInputs = with pkgs; [
+            cargo
+            rustc
             # tools
             asciinema_3
             bacon

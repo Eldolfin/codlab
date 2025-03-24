@@ -26,6 +26,7 @@ Goal: allowing easy cross-editor live collaboration
 
 ### $$?
 
+- [ ] branding
 - [ ] accounts & authentication
 - [ ] vscode extension
 - [ ] intellij extension

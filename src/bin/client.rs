@@ -27,7 +27,7 @@ use tower::ServiceBuilder;
 use tracing::{info, Level};
 
 // TODO: add configuration?
-const SERVER_ADDR: &str = "ws://127.0.0.1:7575";
+const SERVER_ADDR: &str = "ws://192.168.101.194:7575";
 
 type CodelabServer = SplitSink<
     WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
