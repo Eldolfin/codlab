@@ -5,7 +5,7 @@ use async_lsp::lsp_types::TextDocumentSyncCapability::Kind;
 use async_lsp::lsp_types::{
     ApplyWorkspaceEditParams, DidChangeConfigurationParams, DidChangeTextDocumentParams,
     DidOpenTextDocumentParams, InitializeParams, InitializeResult, ServerCapabilities,
-    TextDocumentSyncKind, TextEdit, WorkspaceEdit,
+    TextDocumentContentChangeEvent, TextDocumentSyncKind, TextEdit, WorkspaceEdit,
 };
 use async_lsp::panic::CatchUnwindLayer;
 use async_lsp::router::Router;
@@ -13,13 +13,13 @@ use async_lsp::server::LifecycleLayer;
 use async_lsp::tracing::TracingLayer;
 use async_lsp::{ClientSocket, LanguageClient as _, LanguageServer, ResponseError};
 use codlab::messages::Message;
+use codlab::peekable_channel::PeekableReceiver;
 use futures::future::BoxFuture;
 use futures::stream::SplitSink;
 use futures::{SinkExt, StreamExt as _, TryStreamExt};
 use std::collections::HashMap;
-use std::iter::Peekable;
 use std::ops::ControlFlow;
-use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::mpsc::{self, Sender};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio_tungstenite::{connect_async, WebSocketStream};
@@ -37,8 +37,9 @@ type CodelabServer = SplitSink<
 struct ServerState {
     client: ClientSocket,
     codelab_server: Arc<Mutex<CodelabServer>>,
-    ignore_queue_recv: Receiver<DidChangeTextDocumentParams>,
+    ignore_queue_recv: PeekableReceiver<DidChangeTextDocumentParams>,
     ignore_queue_send: Sender<DidChangeTextDocumentParams>,
+    ignore_pool: Vec<DidChangeTextDocumentParams>,
 }
 
 impl LanguageServer for ServerState {
@@ -75,16 +76,23 @@ impl LanguageServer for ServerState {
     }
 
     fn did_change(&mut self, params: DidChangeTextDocumentParams) -> Self::NotifyResult {
-        // info!("did_change: {:#?}", params);
-        // FIXME: race condition here, if we change the doc before the request has time to be applied and the event fired from the editor, we don't send the change
-        // TODO: use a peekable mpsc or something
+        while let Ok(ignore) = self.ignore_queue_recv.try_recv() {
+            self.ignore_pool.push(ignore);
+        }
+        if let Some(i) = self
+            .ignore_pool
+            .iter()
+            .enumerate()
+            .find(|(_, change)| changes_eq(change, &params))
+            .map(|(i, _)| i)
         // if self
         //     .ignore_queue_recv
-        //     .peek()
-        //     .is_some_and(|change| change == &params)
-        // {
-        // self.ignore_queue_recv.next();
-        if self.ignore_queue_recv.try_recv().is_ok() {
+        //     .try_recv_peek()
+        //     .unwrap()
+        //     .is_some_and(|change| changes_eq(change, &params))
+        {
+            self.ignore_pool.remove(i);
+            // self.ignore_queue_recv.try_recv().unwrap();
             info!("Ignoring next change as it was received");
             return ControlFlow::Continue(());
         }
@@ -101,11 +109,29 @@ impl LanguageServer for ServerState {
                     ))
                     .await
                     .expect("Failed to send message to server");
-                info!("sent message ez");
             }
         });
         ControlFlow::Continue(())
     }
+}
+
+fn content_changes_eq(
+    a: &TextDocumentContentChangeEvent,
+    b: &TextDocumentContentChangeEvent,
+) -> bool {
+    a.range == b.range && a.text == b.text
+}
+
+fn changes_eq(a: &DidChangeTextDocumentParams, b: &DidChangeTextDocumentParams) -> bool {
+    let eq = a.text_document.uri == b.text_document.uri
+        && a.content_changes
+            .iter()
+            .zip(b.content_changes.iter())
+            .all(|(a, b)| content_changes_eq(a, b));
+    if !eq {
+        info!("{:#?} == {:#?}", &a.content_changes, &b.content_changes);
+    }
+    eq
 }
 
 struct ChangeEvent(DidChangeTextDocumentParams);
@@ -113,12 +139,13 @@ struct ChangeEvent(DidChangeTextDocumentParams);
 impl ServerState {
     fn new_router(editor_client: ClientSocket, codelab_server: CodelabServer) -> Router<Self> {
         let (ignore_queue_send, ignore_queue_recv) = mpsc::channel();
-        // let ignore_queue_recv = ignore_queue_recv.into_iter().peekable();
+        let ignore_queue_recv = PeekableReceiver::from(ignore_queue_recv);
         let mut router = Router::from_language_server(Self {
             client: editor_client,
             codelab_server: Arc::new(Mutex::new(codelab_server)),
             ignore_queue_recv,
             ignore_queue_send,
+            ignore_pool: Vec::new(),
         });
         router.event(Self::on_change);
         router

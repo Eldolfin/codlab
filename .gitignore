@@ -1,3 +1,4 @@
 /target
-.direnv
+/.direnv
 test.md
+/editors/vscode/lsp-sample-1.0.0.vsix
