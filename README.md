@@ -4,6 +4,10 @@ A code collaboration tool based on the language server protocol.
 
 Goal: allowing easy cross-editor live collaboration
 
+## Demo
+
+[![asciicast](https://asciinema.org/a/YpQHnMfWUyjrMWXMEJrXuUrg7.svg)](https://asciinema.org/a/YpQHnMfWUyjrMWXMEJrXuUrg7)
+
 ## TODO
 
 ### Needed for demo

@@ -1,0 +1,13 @@
+layout {
+    pane split_direction="vertical" {
+        pane
+        pane
+        pane
+    }
+    pane {
+        command "just"
+        args    "server"
+        size    "30%"
+    }
+}
+

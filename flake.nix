@@ -13,9 +13,14 @@
       in {
         devShell = pkgs.mkShell {
           buildInputs = with pkgs; [
+            # tools
+            asciinema_3
             bacon
+            zellij
+
             # test IDEs
             helix
+            neovim
             vscodium-fhs
           ];
         };
