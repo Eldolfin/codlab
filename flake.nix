@@ -16,6 +16,7 @@
             cargo
             rustc
             # tools
+            act
             asciinema_3
             bacon
             zellij
