@@ -3,21 +3,21 @@ use async_lsp::client_monitor::ClientProcessMonitorLayer;
 use async_lsp::concurrency::ConcurrencyLayer;
 use async_lsp::lsp_types::TextDocumentSyncCapability::Kind;
 use async_lsp::lsp_types::{
-    ApplyWorkspaceEditParams, DidChangeConfigurationParams, DidChangeTextDocumentParams,
-    DidOpenTextDocumentParams, InitializeParams, InitializeResult, ServerCapabilities,
-    TextDocumentContentChangeEvent, TextDocumentSyncKind, TextEdit, WorkspaceEdit,
+    DidChangeConfigurationParams, DidChangeTextDocumentParams, DidOpenTextDocumentParams,
+    InitializeParams, InitializeResult, ServerCapabilities, TextDocumentContentChangeEvent,
+    TextDocumentSyncKind,
 };
 use async_lsp::panic::CatchUnwindLayer;
 use async_lsp::router::Router;
 use async_lsp::server::LifecycleLayer;
 use async_lsp::tracing::TracingLayer;
 use async_lsp::{ClientSocket, LanguageClient as _, LanguageServer, ResponseError};
+use codlab::change_event_to_workspace_edit;
 use codlab::messages::Message;
 use codlab::peekable_channel::PeekableReceiver;
 use futures::future::BoxFuture;
 use futures::stream::SplitSink;
 use futures::{SinkExt, StreamExt as _, TryStreamExt};
-use std::collections::HashMap;
 use std::ops::ControlFlow;
 use std::sync::mpsc::{self, Sender};
 use std::sync::Arc;
@@ -50,7 +50,7 @@ impl LanguageServer for ServerState {
         &mut self,
         params: InitializeParams,
     ) -> BoxFuture<'static, Result<InitializeResult, Self::Error>> {
-        eprintln!("Initialize with {params:?}");
+        info!("Initialize with {params:?}");
         Box::pin(async move {
             Ok(InitializeResult {
                 capabilities: ServerCapabilities {
@@ -154,24 +154,9 @@ impl ServerState {
     fn on_change(&mut self, event: ChangeEvent) -> ControlFlow<async_lsp::Result<()>> {
         // we don't want to send what we just received otherwise we create an infinite loop between clients
         self.ignore_queue_send.send(event.0.clone()).unwrap();
-        let _ = self.client.apply_edit(ApplyWorkspaceEditParams {
-            label: Some("TODO: edit labels".to_owned()),
-            edit: WorkspaceEdit {
-                changes: Some(HashMap::from([(
-                    event.0.text_document.uri,
-                    event
-                        .0
-                        .content_changes
-                        .iter()
-                        .map(|change| TextEdit {
-                            range: change.range.expect("Changes to have a range"),
-                            new_text: change.text.clone(),
-                        })
-                        .collect(),
-                )])),
-                ..Default::default()
-            },
-        });
+        let _ = self
+            .client
+            .apply_edit(change_event_to_workspace_edit(&event.0));
         ControlFlow::Continue(())
     }
 }

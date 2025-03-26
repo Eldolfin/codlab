@@ -1,3 +1,5 @@
+test:
+    git ls-files | entr -cr cargo test
 server:
     git ls-files | entr -cr cargo run --bin server
 
@@ -6,3 +8,5 @@ demo:
 
 demo-record:
     asciinema rec --overwrite demo/demo.cast
+
+
