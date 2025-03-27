@@ -21,3 +21,10 @@ assert_cmd = "2.0.16"
 async-process = "2.3.0"
 proptest = { version = "1.6.0", features = ["proptest-macro"] }
 proptest-derive = "0.5.1"
+
+[profile.test.package.proptest]
+opt-level = 3
+
+[profile.test.package.rand_chacha]
+opt-level = 3
+
