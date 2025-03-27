@@ -1,4 +1,5 @@
 /// Runs the lsp-server (client bin) with a mocked lsp-client
+/// and with randomized inputs
 mod common;
 
 use assert_cmd::cargo::CommandCargoExt as _;
@@ -7,11 +8,41 @@ use async_lsp::lsp_types::{
     TextDocumentContentChangeEvent, TextDocumentItem, Url,
 };
 use common::lsp_client;
+use proptest::{prelude::Arbitrary, proptest};
+use proptest_derive::Arbitrary;
 use std::{env::temp_dir, process::Command, time::Duration};
 use tracing::Level;
 
-#[tokio::test]
-async fn test_mocked_clients() -> anyhow::Result<()> {
+#[derive(Debug)]
+struct TestTextDocumentContentChangeEvent(TextDocumentContentChangeEvent);
+
+impl Arbitrary for TestTextDocumentContentChangeEvent {
+    type Parameters = (String);
+    type Strategy = ();
+
+    fn arbitrary_with(args: Self::Parameters) -> Self::Strategy {
+        todo!()
+    }
+}
+
+#[derive(Debug, Arbitrary)]
+enum Client {
+    Client1,
+    Client2,
+}
+// single document change from one of the clients
+#[derive(Debug, Arbitrary)]
+struct ClientChange {
+    from: Client,
+    change: TestTextDocumentContentChangeEvent,
+}
+
+#[derive(Debug, Arbitrary)]
+struct TestCase {
+    changes: Vec<ClientChange>,
+}
+
+async fn test_mocked_clients_quickcheck(params: TestCase) -> anyhow::Result<()> {
     tracing_subscriber::fmt()
         .with_max_level(Level::INFO)
         .pretty()
@@ -40,19 +71,22 @@ async fn test_mocked_clients() -> anyhow::Result<()> {
         },
     })?;
 
-    client1
-        .did_change(DidChangeTextDocumentParams {
-            text_document: async_lsp::lsp_types::VersionedTextDocumentIdentifier {
-                uri: file_uri.clone(),
-                version: 0,
-            },
-            content_changes: vec![TextDocumentContentChangeEvent {
-                range: Some(Range::new(Position::new(0, 0), Position::new(0, 0))),
-                text: added.to_owned(),
-                range_length: None,
-            }],
-        })
-        .await?;
+    for change in params.changes {
+        // client1
+        //     .did_change(DidChangeTextDocumentParams {
+        //         text_document: async_lsp::lsp_types::VersionedTextDocumentIdentifier {
+        //             uri: file_uri.clone(),
+        //             version: 0,
+        //         },
+        //         content_changes: vec![TextDocumentContentChangeEvent {
+        //             range: Some(Range::new(Position::new(0, 0), Position::new(0, 0))),
+        //             text: added.to_owned(),
+        //             range_length: None,
+        //         }],
+        //     })
+        //     .await?;
+        todo!()
+    }
 
     // this is not great
     tokio::time::sleep(Duration::from_millis(10)).await;
@@ -66,4 +100,10 @@ async fn test_mocked_clients() -> anyhow::Result<()> {
     client1.drop().await;
     client2.drop().await;
     Ok(())
+}
+
+proptest! {
+    #[test]
+    fn test_mocked_clients_quickcheck_sync(params: TestCase) {dbg!(client1_changes);
+    }
 }

@@ -19,6 +19,7 @@
             act
             asciinema_3
             bacon
+            vsce
             zellij
 
             # test IDEs
