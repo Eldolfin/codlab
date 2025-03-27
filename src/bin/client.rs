@@ -1,30 +1,34 @@
-use anyhow::Context;
-use async_lsp::client_monitor::ClientProcessMonitorLayer;
-use async_lsp::concurrency::ConcurrencyLayer;
-use async_lsp::lsp_types::TextDocumentSyncCapability::Kind;
-use async_lsp::lsp_types::{
-    DidChangeConfigurationParams, DidChangeTextDocumentParams, DidOpenTextDocumentParams,
-    InitializeParams, InitializeResult, ServerCapabilities, TextDocumentContentChangeEvent,
-    TextDocumentSyncKind,
+use anyhow::{anyhow, Context};
+use async_lsp::{
+    client_monitor::ClientProcessMonitorLayer,
+    concurrency::ConcurrencyLayer,
+    lsp_types::{
+        DidChangeConfigurationParams, DidChangeTextDocumentParams, DidOpenTextDocumentParams,
+        InitializeParams, InitializeResult, ServerCapabilities, TextDocumentContentChangeEvent,
+        TextDocumentSyncCapability::Kind, TextDocumentSyncKind,
+    },
+    panic::CatchUnwindLayer,
+    router::Router,
+    server::LifecycleLayer,
+    tracing::TracingLayer,
+    ClientSocket, LanguageClient as _, LanguageServer, ResponseError,
 };
-use async_lsp::panic::CatchUnwindLayer;
-use async_lsp::router::Router;
-use async_lsp::server::LifecycleLayer;
-use async_lsp::tracing::TracingLayer;
-use async_lsp::{ClientSocket, LanguageClient as _, LanguageServer, ResponseError};
-use codlab::change_event_to_workspace_edit;
-use codlab::messages::Message;
-use codlab::peekable_channel::PeekableReceiver;
-use futures::future::BoxFuture;
-use futures::stream::SplitSink;
-use futures::{SinkExt, StreamExt as _, TryStreamExt};
-use std::ops::ControlFlow;
-use std::sync::mpsc::{self, Sender};
-use std::sync::Arc;
+use codlab::{
+    change_event_to_workspace_edit, common::init_logger, messages::Message,
+    peekable_channel::PeekableReceiver,
+};
+use futures::{future::BoxFuture, stream::SplitSink, SinkExt, StreamExt as _, TryStreamExt};
+use std::{
+    ops::ControlFlow,
+    sync::{
+        mpsc::{self, Sender},
+        Arc,
+    },
+};
 use tokio::sync::Mutex;
 use tokio_tungstenite::{connect_async, WebSocketStream};
 use tower::ServiceBuilder;
-use tracing::{info, Level};
+use tracing::{debug, info};
 
 // TODO: add configuration?
 // const SERVER_ADDR: &str = "ws://192.168.101.194:7575";
@@ -50,7 +54,8 @@ impl LanguageServer for ServerState {
         &mut self,
         params: InitializeParams,
     ) -> BoxFuture<'static, Result<InitializeResult, Self::Error>> {
-        info!("Initialize with {params:?}");
+        info!("Initialized");
+        debug!("Initialize params: {params:?}");
         Box::pin(async move {
             Ok(InitializeResult {
                 capabilities: ServerCapabilities {
@@ -71,7 +76,7 @@ impl LanguageServer for ServerState {
 
     fn did_open(&mut self, params: DidOpenTextDocumentParams) -> Self::NotifyResult {
         // TODO: open document for peers
-        info!("opened document: {:#?}", params.text_document);
+        info!("opened document: {}", params.text_document.uri);
         ControlFlow::Continue(())
     }
 
@@ -128,9 +133,9 @@ fn changes_eq(a: &DidChangeTextDocumentParams, b: &DidChangeTextDocumentParams) 
             .iter()
             .zip(b.content_changes.iter())
             .all(|(a, b)| content_changes_eq(a, b));
-    if !eq {
-        info!("{:#?} == {:#?}", &a.content_changes, &b.content_changes);
-    }
+    // if !eq {
+    //     info!("{:#?} == {:#?}", &a.content_changes, &b.content_changes);
+    // }
     eq
 }
 
@@ -198,11 +203,7 @@ async fn main() -> anyhow::Result<()> {
             .service(ServerState::new_router(client, send))
     });
 
-    tracing_subscriber::fmt()
-        .with_max_level(Level::INFO)
-        .with_ansi(false)
-        .with_writer(std::io::stderr)
-        .init();
+    init_logger();
 
     // Prefer truly asynchronous piped stdin/stdout without blocking tasks.
     #[cfg(unix)]
@@ -217,6 +218,9 @@ async fn main() -> anyhow::Result<()> {
         tokio_util::compat::TokioAsyncWriteCompatExt::compat_write(tokio::io::stdout()),
     );
 
-    server.run_buffered(stdin, stdout).await.unwrap();
-    Ok(())
+    match server.run_buffered(stdin, stdout).await {
+        Ok(()) => Ok(()),
+        Err(async_lsp::Error::Eof) => Ok(()),
+        Err(err) => Err(anyhow!("Failed to run on stdio: {err:#?}")),
+    }
 }

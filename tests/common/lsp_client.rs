@@ -1,3 +1,4 @@
+// FIXME: this does not need to be async
 use std::ops::ControlFlow;
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
@@ -8,7 +9,7 @@ use async_lsp::lsp_types::request::ApplyWorkspaceEdit;
 use async_lsp::lsp_types::{
     ApplyWorkspaceEditParams, ApplyWorkspaceEditResponse, ClientCapabilities,
     DidChangeTextDocumentParams, DidOpenTextDocumentParams, InitializeParams, InitializedParams,
-    PublishDiagnosticsParams, ShowMessageParams, WindowClientCapabilities,
+    WindowClientCapabilities,
 };
 use async_lsp::panic::CatchUnwindLayer;
 use async_lsp::router::Router;
@@ -18,7 +19,7 @@ use async_process::Child;
 use codlab::change_event_to_workspace_edit;
 use tokio::task::JoinHandle;
 use tower::ServiceBuilder;
-use tracing::info;
+use tracing::{debug, info};
 
 struct ClientState {
     document: Arc<Mutex<Vec<String>>>,
@@ -27,15 +28,6 @@ struct ClientState {
 impl LanguageClient for ClientState {
     type Error = ResponseError;
     type NotifyResult = ControlFlow<async_lsp::Result<()>>;
-
-    fn publish_diagnostics(&mut self, _: PublishDiagnosticsParams) -> Self::NotifyResult {
-        ControlFlow::Continue(())
-    }
-
-    fn show_message(&mut self, params: ShowMessageParams) -> Self::NotifyResult {
-        tracing::info!("Message {:?}: {}", params.typ, params.message);
-        ControlFlow::Continue(())
-    }
 }
 
 impl ClientState {
@@ -44,7 +36,18 @@ impl ClientState {
         router.event(Self::on_stop);
         router.event(Self::on_local_change);
         router.request::<ApplyWorkspaceEdit, _>(|state, params| {
-            info!("Received apply edit: {params:#?}");
+            info!(
+                "Received apply edit: `{}`",
+                params
+                    .edit
+                    .changes
+                    .as_ref()
+                    .unwrap()
+                    .values()
+                    .next()
+                    .unwrap()[0]
+                    .new_text
+            );
             state.apply_edits_impl(params);
             async move {
                 Ok(ApplyWorkspaceEditResponse {
@@ -128,7 +131,7 @@ impl MockClient {
         let stdout = child.stdout.take().unwrap();
         let stdin = child.stdin.take().unwrap();
         let mainloop_fut = tokio::spawn(async move {
-            mainloop.run_buffered(stdout, stdin).await.unwrap();
+            let _ = mainloop.run_buffered(stdout, stdin).await;
         });
 
         // Initialize.
@@ -145,7 +148,7 @@ impl MockClient {
             })
             .await
             .unwrap();
-        info!("Initialized: {init_ret:?}");
+        debug!("Initialized: {init_ret:?}");
         server.initialized(InitializedParams {}).unwrap();
 
         Self {
@@ -182,11 +185,11 @@ impl MockClient {
 
     // manual drop because Async drop doesn't exist yet
     pub async fn drop(mut self) {
+        let _ = self.server.emit(Stop);
         // Shutdown.
-        self.server.shutdown(()).await.unwrap();
-        self.server.exit(()).unwrap();
+        let _ = self.server.shutdown(()).await;
+        let _ = self.server.exit(());
 
-        self.server.emit(Stop).unwrap();
-        self.mainloop_fut.await.unwrap();
+        let _ = self.mainloop_fut.await;
     }
 }

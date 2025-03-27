@@ -1,21 +1,17 @@
 use std::{collections::HashMap, sync::Arc};
 
 use anyhow::Context;
-use codlab::messages::Message;
+use codlab::{common::init_logger, messages::Message};
 use futures::{future::join_all, SinkExt, StreamExt, TryStreamExt as _};
 use tokio::{net::TcpListener, sync::Mutex};
 use tokio_tungstenite::tungstenite;
-use tracing::{error, info, Level};
+use tracing::{error, info};
 // TODO: config
 const LISTEN_ADDR: &str = "0.0.0.0:7575";
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt()
-        .with_max_level(Level::INFO)
-        .with_ansi(false)
-        .with_writer(std::io::stderr)
-        .init();
+    init_logger();
 
     info!("Listening at ws://{LISTEN_ADDR}");
     let listener = TcpListener::bind(LISTEN_ADDR)
@@ -41,7 +37,7 @@ async fn main() -> anyhow::Result<()> {
             while let Ok(Some(msg)) = recv
                 .try_next()
                 .await
-                .inspect_err(|err| error!("Failed to recv client messages: {err:#}"))
+                .inspect_err(|_| info!("Client disconnected: {peer_addr}"))
             {
                 info!("received msg: {msg:#?}");
                 let msg: Message =

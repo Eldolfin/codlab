@@ -6,17 +6,13 @@ use async_lsp::lsp_types::{
     DidChangeTextDocumentParams, DidOpenTextDocumentParams, Position, Range,
     TextDocumentContentChangeEvent, TextDocumentItem, Url,
 };
+use codlab::common::init_logger;
 use common::lsp_client;
 use std::{env::temp_dir, process::Command, time::Duration};
-use tracing::Level;
 
 #[tokio::test]
 async fn test_mocked_clients() -> anyhow::Result<()> {
-    tracing_subscriber::fmt()
-        .with_max_level(Level::INFO)
-        .pretty()
-        .with_writer(std::io::stderr)
-        .init();
+    init_logger();
 
     let mut _server_child =
         async_process::Command::from(Command::cargo_bin("server").expect("server binary to exist"))
