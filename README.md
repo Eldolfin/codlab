@@ -16,6 +16,7 @@ Goal: allowing easy cross-editor live collaboration
 - [ ] draw other client cursors
 - [ ] check that there is no possible race conditions that would cause a desync
       in client's documents
+- [ ] doc
 
 ### Advanced features
 
@@ -23,6 +24,7 @@ Goal: allowing easy cross-editor live collaboration
       doesn't, use the available lsp server remotely
   - requesting to lsp cannot be done from an lsp, this would need to be
     implemented in an editor specific plugin
+- [ ] edit history with author and changes
 
 ### $$?
 

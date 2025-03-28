@@ -9,4 +9,5 @@ demo:
 demo-record:
     asciinema rec --overwrite demo/demo.cast
 
-
+book:
+    cd book && mdbook serve --open

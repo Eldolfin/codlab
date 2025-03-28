@@ -15,10 +15,12 @@
           buildInputs = with pkgs; [
             cargo
             rustc
+
             # tools
             act
             asciinema_3
             bacon
+            mdbook
             vsce
             zellij
 

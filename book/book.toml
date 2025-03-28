@@ -1,0 +1,6 @@
+[book]
+authors = ["eldolfin"]
+language = "en"
+multilingual = false
+src = "src"
+title = "Codlab Documentation"
