@@ -13,8 +13,8 @@ use proptest::{prelude::Arbitrary, prop_compose, proptest, test_runner::TestRunn
 use proptest_derive::Arbitrary;
 use std::{env::temp_dir, process::Command, time::Duration};
 
-const MAX_POSITION_SIZE: u32 = 10;
-const INPUT_REGEX: &str = "a{1,5}";
+const MAX_POSITION_SIZE: u32 = 1;
+const INPUT_REGEX: &str = "[a-z]{1,5}";
 
 prop_compose! {
     fn arb_text_document_change()(

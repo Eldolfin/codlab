@@ -84,13 +84,23 @@ impl ClientState {
             let mut document = self.document.lock().unwrap();
             let position = change.range.start;
             if let Some(line) = document.get_mut(position.line as usize) {
+                if position.character as usize > line.len() {
+                    line.insert_str(
+                        line.len(),
+                        &" ".repeat(position.character as usize - line.len()),
+                    );
+                }
                 line.insert_str(position.character as usize, &change.new_text);
             } else {
                 // add empty lines up to the change
                 for _ in 0..position.line as usize - document.len() {
                     document.push(String::new());
                 }
-                document.push(change.new_text.clone());
+                document.push(format!(
+                    "{}{}",
+                    " ".repeat(position.character as usize),
+                    change.new_text.clone()
+                ));
             }
         }
     }
