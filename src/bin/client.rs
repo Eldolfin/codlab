@@ -11,10 +11,12 @@ use async_lsp::{
     router::Router,
     server::LifecycleLayer,
     tracing::TracingLayer,
-    ClientSocket, LanguageClient as _, LanguageServer, ResponseError,
+    ClientSocket, LanguageClient, LanguageServer, ResponseError,
 };
 use codlab::{
-    change_event_to_workspace_edit, common::init_logger, messages::Message,
+    change_event_to_workspace_edit,
+    common::init_logger,
+    messages::{Change, ClientMessage, CommonMessage, ServerMessage},
     peekable_channel::PeekableReceiver,
 };
 use futures::{future::BoxFuture, stream::SplitSink, SinkExt, StreamExt as _, TryStreamExt};
@@ -29,6 +31,7 @@ use tokio::sync::Mutex;
 use tokio_tungstenite::{connect_async, WebSocketStream};
 use tower::ServiceBuilder;
 use tracing::{debug, info};
+use uuid::Uuid;
 
 // TODO: add configuration?
 // const SERVER_ADDR: &str = "ws://192.168.101.194:7575";
@@ -101,23 +104,33 @@ impl LanguageServer for ServerState {
             info!("Ignoring next change as it was received");
             return ControlFlow::Continue(());
         }
-        let mutex = self.codelab_server.clone();
         tokio::spawn({
+            let send = self.codelab_server.clone();
             async move {
-                mutex
-                    .lock()
-                    .await
-                    .send(tokio_tungstenite::tungstenite::Message::Text(
-                        serde_json::to_string(&Message { change: params })
-                            .expect("To be able to construct a json")
-                            .into(),
-                    ))
-                    .await
-                    .expect("Failed to send message to server");
+                client_send_msg(
+                    &send,
+                    &ClientMessage::Common(CommonMessage::Change(Change {
+                        change: params,
+                        id: Uuid::new_v4(),
+                    })),
+                )
+                .await;
             }
         });
         ControlFlow::Continue(())
     }
+}
+
+async fn client_send_msg(send: &Arc<Mutex<CodelabServer>>, msg: &ClientMessage) {
+    send.lock()
+        .await
+        .send(tokio_tungstenite::tungstenite::Message::Text(
+            serde_json::to_string(msg)
+                .expect("To be able to construct a json")
+                .into(),
+        ))
+        .await
+        .expect("Failed to send message to server");
 }
 
 fn content_changes_eq(
@@ -142,12 +155,15 @@ fn changes_eq(a: &DidChangeTextDocumentParams, b: &DidChangeTextDocumentParams) 
 struct ChangeEvent(DidChangeTextDocumentParams);
 
 impl ServerState {
-    fn new_router(editor_client: ClientSocket, codelab_server: CodelabServer) -> Router<Self> {
+    fn new_router(
+        editor_client: ClientSocket,
+        codelab_server: Arc<Mutex<CodelabServer>>,
+    ) -> Router<Self> {
         let (ignore_queue_send, ignore_queue_recv) = mpsc::channel();
         let ignore_queue_recv = PeekableReceiver::from(ignore_queue_recv);
         let mut router = Router::from_language_server(Self {
             client: editor_client,
-            codelab_server: Arc::new(Mutex::new(codelab_server)),
+            codelab_server,
             ignore_queue_recv,
             ignore_queue_send,
             ignore_pool: Vec::new(),
@@ -158,10 +174,7 @@ impl ServerState {
 
     fn on_change(&mut self, event: ChangeEvent) -> ControlFlow<async_lsp::Result<()>> {
         // we don't want to send what we just received otherwise we create an infinite loop between clients
-        self.ignore_queue_send.send(event.0.clone()).unwrap();
-        let _ = self
-            .client
-            .apply_edit(change_event_to_workspace_edit(&event.0));
+        self.ignore_queue_send.send(event.0).unwrap();
         ControlFlow::Continue(())
     }
 }
@@ -172,22 +185,39 @@ async fn main() -> anyhow::Result<()> {
         .await
         .context("Could not connect to server")?;
     let (send, mut recv) = ws.split();
+    let send = Arc::new(Mutex::new(send));
 
     let (server, _) = async_lsp::MainLoop::new_server(|client| {
         tokio::spawn({
-            let client = client.clone();
+            let mut client = client.clone();
+            let send = send.clone();
             async move {
                 while let Some(msg) = recv
                     .try_next()
                     .await
                     .context("Failed to recv updates from server")?
                 {
-                    let msg: Message = serde_json::from_str(
+                    let msg: ServerMessage = serde_json::from_str(
                         msg.to_text().context("Server sent a non text message")?,
                     )
                     .context("Server sent an invalid message")?;
-                    if client.emit(ChangeEvent(msg.change)).is_err() {
-                        break;
+                    match msg {
+                        ServerMessage::Common(common_message) => match common_message {
+                            CommonMessage::Change(change) => {
+                                if client.emit(ChangeEvent(change.change.clone())).is_err() {
+                                    break;
+                                }
+                                client
+                                    .apply_edit(change_event_to_workspace_edit(&change.change))
+                                    .await
+                                    .unwrap();
+                                client_send_msg(
+                                    &send,
+                                    &ClientMessage::AcknowledgeChange(change.id),
+                                )
+                                .await;
+                            }
+                        },
                     }
                 }
                 Ok::<(), anyhow::Error>(())

@@ -7,7 +7,10 @@ edition = "2024"
 [dependencies]
 anyhow = "1.0.97"
 async-lsp = { version = "0.2.2", features = ["async-io", "tokio"] }
+automerge = "0.6.0"
+autosurgeon = "0.8.7"
 futures = "0.3.31"
+operational-transform = "0.6.1"
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
 tokio = { version = "1.44.1", features = ["macros", "rt", "sync", "time"] }
@@ -15,6 +18,7 @@ tokio-tungstenite = "0.26.2"
 tower = "0.5.2"
 tracing = "0.1.41"
 tracing-subscriber = "0.3.19"
+uuid = { version = "1.16.0", features = ["serde", "v4"] }
 
 [dev-dependencies]
 assert_cmd = "2.0.16"
@@ -23,8 +27,5 @@ proptest = { version = "1.6.0", features = ["proptest-macro"] }
 proptest-derive = "0.5.1"
 
 [profile.test.package.proptest]
-opt-level = 3
-
-[profile.test.package.rand_chacha]
 opt-level = 3
 

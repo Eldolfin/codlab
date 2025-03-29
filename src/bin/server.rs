@@ -1,7 +1,10 @@
 use std::{collections::HashMap, sync::Arc};
 
 use anyhow::Context;
-use codlab::{common::init_logger, messages::Message};
+use codlab::{
+    common::init_logger,
+    messages::{ClientMessage, ServerMessage},
+};
 use futures::{future::join_all, SinkExt, StreamExt, TryStreamExt as _};
 use tokio::{net::TcpListener, sync::Mutex};
 use tokio_tungstenite::tungstenite;
@@ -40,21 +43,26 @@ async fn main() -> anyhow::Result<()> {
                 .inspect_err(|_| info!("Client disconnected: {peer_addr}"))
             {
                 info!("received msg: {msg:#?}");
-                let msg: Message =
+                let msg: ClientMessage =
                     serde_json::from_str(&msg.into_text().expect("Client sent a non text message"))
                         .expect("Client sent an invalid message");
-                let mut lock = clients.lock().await;
-                let futs =
-                    lock.iter_mut()
-                        .filter(|(addr, _)| addr != &&peer_addr)
-                        .map(|(_, send)| {
-                            send.send(tungstenite::Message::Text(
-                                serde_json::to_string(&msg)
-                                    .expect("To be able to construct a json")
-                                    .into(),
-                            ))
-                        });
-                join_all(futs).await;
+                match msg {
+                    ClientMessage::AcknowledgeChange(uuid) => todo!(),
+                    ClientMessage::Common(common_message) => {
+                        let msg = ServerMessage::Common(common_message);
+                        let mut lock = clients.lock().await;
+                        let futs = lock.iter_mut().filter(|(addr, _)| addr != &&peer_addr).map(
+                            |(_, send)| {
+                                send.send(tungstenite::Message::Text(
+                                    serde_json::to_string(&msg)
+                                        .expect("To be able to construct a json")
+                                        .into(),
+                                ))
+                            },
+                        );
+                        join_all(futs).await;
+                    }
+                }
             }
         });
     }
