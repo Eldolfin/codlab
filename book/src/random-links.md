@@ -1,5 +1,7 @@
 # Random links
 
+- [Trying to explain the "race condition"](https://excalidraw.com/#json=VwIvEKe_LXaFCW4WuM87W,ZdGXvqjak_3FATn2Et7x6g)
+
 - [Visualization of operational transformation with a central server](https://operational-transformation.github.io/)
 
 ## Good docs on the topic of document synchronization
