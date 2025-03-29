@@ -5,12 +5,20 @@ use codlab::{
     common::init_logger,
     messages::{ClientMessage, ServerMessage},
 };
-use futures::{future::join_all, SinkExt, StreamExt, TryStreamExt as _};
-use tokio::{net::TcpListener, sync::Mutex};
-use tokio_tungstenite::tungstenite;
+use futures::{future::join_all, stream::SplitSink, SinkExt, StreamExt, TryStreamExt as _};
+use tokio::{
+    net::{TcpListener, TcpStream},
+    sync::Mutex,
+};
+use tokio_tungstenite::{tungstenite, WebSocketStream};
 use tracing::{debug, error, info};
 // TODO: config
 const LISTEN_ADDR: &str = "0.0.0.0:7575";
+
+struct Client {
+    send: SplitSink<WebSocketStream<TcpStream>, tokio_tungstenite::tungstenite::Message>,
+    id: u32,
+}
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
@@ -22,6 +30,12 @@ async fn main() -> anyhow::Result<()> {
         .with_context(|| format!("Failed to bind at addr {LISTEN_ADDR}"))?;
 
     let clients = Arc::new(Mutex::new(HashMap::new()));
+
+    let mut id_incr = 0;
+    let mut next_id = || {
+        id_incr += 1;
+        id_incr
+    };
 
     while let Ok((stream, peer_addr)) = listener.accept().await {
         let peer_addr = peer_addr.to_string();
@@ -35,28 +49,50 @@ async fn main() -> anyhow::Result<()> {
         };
         let (send, mut recv) = ws.split();
         let clients = clients.clone();
-        clients.lock().await.insert(peer_addr.clone(), send);
+        let client_id = next_id();
+        clients.lock().await.insert(
+            peer_addr.clone(),
+            Client {
+                send,
+                id: client_id,
+            },
+        );
         tokio::spawn(async move {
             while let Ok(Some(msg)) = recv
                 .try_next()
                 .await
                 .inspect_err(|_| info!("Client disconnected: {peer_addr}"))
             {
-                info!("received msg: {msg:#?}");
+                // info!("received msg: {msg:#?}");
                 let msg: ClientMessage =
                     serde_json::from_str(&msg.into_text().expect("Client sent a non text message"))
                         .expect("Client sent an invalid message");
                 match msg {
                     ClientMessage::AcknowledgeChange(uuid) => todo!(),
                     ClientMessage::Common(common_message) => {
+                        match &common_message {
+                            codlab::messages::CommonMessage::Change(change) => {
+                                let change = &change.change.content_changes[0];
+                                let range = change.range.unwrap();
+                                debug!(
+                                    "#{}: ({}:{}):({}:{}) {:#?}",
+                                    client_id,
+                                    range.start.line,
+                                    range.start.character,
+                                    range.end.line,
+                                    range.end.character,
+                                    change.text
+                                );
+                            }
+                        }
                         let msg = ServerMessage::Common(common_message);
                         debug!("Broadcasting message...!");
                         let mut lock = clients.lock().await;
                         let futs: Vec<_> = lock
                             .iter_mut()
                             .filter(|(addr, _)| addr != &&peer_addr)
-                            .map(|(_, send)| {
-                                send.send(tungstenite::Message::Text(
+                            .map(|(_, client)| {
+                                client.send.send(tungstenite::Message::Text(
                                     serde_json::to_string(&msg)
                                         .expect("To be able to construct a json")
                                         .into(),
