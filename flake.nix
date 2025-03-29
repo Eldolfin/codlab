@@ -18,7 +18,6 @@
 
             # tools
             act
-            asciinema_3
             bacon
             mdbook
             vsce
