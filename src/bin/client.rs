@@ -211,11 +211,12 @@ async fn main() -> anyhow::Result<()> {
                                     .apply_edit(change_event_to_workspace_edit(&change.change))
                                     .await
                                     .unwrap();
-                                client_send_msg(
-                                    &send,
-                                    &ClientMessage::AcknowledgeChange(change.id),
-                                )
-                                .await;
+                                debug!("client: applied remote edit successfully!");
+                                // client_send_msg(
+                                //     &send,
+                                //     &ClientMessage::AcknowledgeChange(change.id),
+                                // )
+                                // .await;
                             }
                         },
                     }

@@ -4,9 +4,11 @@ pub mod peekable_channel;
 
 use std::collections::HashMap;
 
+use anyhow::Context;
 use async_lsp::lsp_types::{
     ApplyWorkspaceEditParams, DidChangeTextDocumentParams, TextEdit, WorkspaceEdit,
 };
+use tracing::warn;
 
 // TODO: move this somewhere else
 pub fn change_event_to_workspace_edit(
@@ -21,9 +23,14 @@ pub fn change_event_to_workspace_edit(
                 event
                     .content_changes
                     .iter()
-                    .map(|change| TextEdit {
-                        range: change.range.expect("Changes to have a range"),
-                        new_text: change.text.clone(),
+                    .filter_map(|change| {
+                        if change.range.is_none() {
+                            warn!("Skipping change which has no range: {:?}", change);
+                        }
+                        Some(TextEdit {
+                            range: change.range?,
+                            new_text: change.text.clone(),
+                        })
                     })
                     .collect(),
             )])),

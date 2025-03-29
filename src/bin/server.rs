@@ -8,7 +8,7 @@ use codlab::{
 use futures::{future::join_all, SinkExt, StreamExt, TryStreamExt as _};
 use tokio::{net::TcpListener, sync::Mutex};
 use tokio_tungstenite::tungstenite;
-use tracing::{error, info};
+use tracing::{debug, error, info};
 // TODO: config
 const LISTEN_ADDR: &str = "0.0.0.0:7575";
 
@@ -50,20 +50,26 @@ async fn main() -> anyhow::Result<()> {
                     ClientMessage::AcknowledgeChange(uuid) => todo!(),
                     ClientMessage::Common(common_message) => {
                         let msg = ServerMessage::Common(common_message);
+                        debug!("Broadcasting message...!");
                         let mut lock = clients.lock().await;
-                        let futs = lock.iter_mut().filter(|(addr, _)| addr != &&peer_addr).map(
-                            |(_, send)| {
+                        let futs: Vec<_> = lock
+                            .iter_mut()
+                            .filter(|(addr, _)| addr != &&peer_addr)
+                            .map(|(_, send)| {
                                 send.send(tungstenite::Message::Text(
                                     serde_json::to_string(&msg)
                                         .expect("To be able to construct a json")
                                         .into(),
                                 ))
-                            },
-                        );
+                            })
+                            .collect();
+                        let peers = futs.len();
                         join_all(futs).await;
+                        debug!("Broadcasted message to {} peers successfully!", peers);
                     }
                 }
             }
+            clients.lock().await.remove(&peer_addr);
         });
     }
     Ok(())
