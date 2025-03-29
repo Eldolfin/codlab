@@ -1,41 +1,42 @@
-import { workspace, ExtensionContext } from 'vscode';
+import { ExtensionContext, workspace } from "vscode";
 
 import {
-	LanguageClient,
-	LanguageClientOptions,
-	ServerOptions,
-	TransportKind
-} from 'vscode-languageclient/node';
+  LanguageClient,
+  LanguageClientOptions,
+  ServerOptions,
+  TransportKind,
+} from "vscode-languageclient/node";
 
 let client: LanguageClient;
 
 export function activate(context: ExtensionContext) {
-	const serverOptions: ServerOptions = {
-		command: 'cargo', args: ['run', '-q', '--bin', 'client'],
-		options: {cwd: '../../'}
-	};
+  const serverOptions: ServerOptions = {
+    command: "cargo",
+    args: ["run", "-q", "--bin", "client"],
+    options: { cwd: "." },
+  };
 
-	// Options to control the language client
-	const clientOptions: LanguageClientOptions = {
-		// Register the server for plain text documents
-		documentSelector: [{ scheme: 'file', language: 'markdown' }],
-	};
+  // Options to control the language client
+  const clientOptions: LanguageClientOptions = {
+    // Register the server for plain text documents
+    documentSelector: [{ scheme: "file", language: "markdown" }],
+  };
 
-	// Create the language client and start the client.
-	client = new LanguageClient(
-		'codelab',
-		'CodeLab',
-		serverOptions,
-		clientOptions
-	);
+  // Create the language client and start the client.
+  client = new LanguageClient(
+    "codelab",
+    "CodeLab",
+    serverOptions,
+    clientOptions,
+  );
 
-	// Start the client. This will also launch the server
-	client.start();
+  // Start the client. This will also launch the server
+  client.start();
 }
 
 export function deactivate(): Thenable<void> | undefined {
-	if (!client) {
-		return undefined;
-	}
-	return client.stop();
+  if (!client) {
+    return undefined;
+  }
+  return client.stop();
 }
