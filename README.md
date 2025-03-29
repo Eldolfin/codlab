@@ -6,11 +6,11 @@ Goal: allowing easy cross-editor live collaboration
 
 ## Demo
 
-[![asciicast](https://asciinema.org/a/YpQHnMfWUyjrMWXMEJrXuUrg7.svg)](https://asciinema.org/a/YpQHnMfWUyjrMWXMEJrXuUrg7)
+https://github.com/user-attachments/assets/eaa66fb2-4d6a-40a2-a5e9-34b7714f0609
 
 ## TODO
 
-### Needed for demo
+### Needed
 
 - [x] server accept multiple client & broadcast change events
 - [ ] draw other client cursors
