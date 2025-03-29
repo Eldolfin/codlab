@@ -26,6 +26,7 @@ use std::{
         mpsc::{self, Sender},
         Arc,
     },
+    time::{Duration, Instant},
 };
 use tokio::sync::Mutex;
 use tokio_tungstenite::{connect_async, WebSocketStream};
@@ -36,6 +37,8 @@ use uuid::Uuid;
 // TODO: add configuration?
 // const SERVER_ADDR: &str = "ws://192.168.101.194:7575";
 const SERVER_ADDR: &str = "ws://127.0.0.1:7575";
+// after this amount of time, we assume the editor didn't send back the change we just asked it to apply
+const CHANGES_QUEUE_TIMEOUT: std::time::Duration = Duration::from_millis(200);
 
 type CodelabServer = SplitSink<
     WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
@@ -44,9 +47,9 @@ type CodelabServer = SplitSink<
 struct ServerState {
     client: ClientSocket,
     codelab_server: Arc<Mutex<CodelabServer>>,
-    ignore_queue_recv: PeekableReceiver<DidChangeTextDocumentParams>,
-    ignore_queue_send: Sender<DidChangeTextDocumentParams>,
-    ignore_pool: Vec<DidChangeTextDocumentParams>,
+    ignore_queue_recv: PeekableReceiver<ChangeEvent>,
+    ignore_queue_send: Sender<ChangeEvent>,
+    ignore_pool: Vec<ChangeEvent>,
 }
 
 impl LanguageServer for ServerState {
@@ -87,11 +90,13 @@ impl LanguageServer for ServerState {
         while let Ok(ignore) = self.ignore_queue_recv.try_recv() {
             self.ignore_pool.push(ignore);
         }
+        // forget old enough changes, assume the editor didn't respond for some reason
+        self.ignore_pool.retain(ChangeEvent::is_recent);
         if let Some(i) = self
             .ignore_pool
             .iter()
             .enumerate()
-            .find(|(_, change)| changes_eq(change, &params))
+            .find(|(_, change)| changes_eq(&change.change, &params))
             .map(|(i, _)| i)
         // if self
         //     .ignore_queue_recv
@@ -152,7 +157,28 @@ fn changes_eq(a: &DidChangeTextDocumentParams, b: &DidChangeTextDocumentParams) 
     eq
 }
 
-struct ChangeEvent(DidChangeTextDocumentParams);
+#[derive(Debug)]
+struct ChangeEvent {
+    change: DidChangeTextDocumentParams,
+    received_at: Instant,
+}
+
+impl ChangeEvent {
+    fn new(change: DidChangeTextDocumentParams) -> Self {
+        Self {
+            change,
+            received_at: Instant::now(),
+        }
+    }
+
+    fn is_recent(&self) -> bool {
+        let recent = Instant::now().duration_since(self.received_at) < CHANGES_QUEUE_TIMEOUT;
+        if !recent {
+            debug!("The editor didn't respond to this change: {:?}", &self);
+        }
+        recent
+    }
+}
 
 impl ServerState {
     fn new_router(
@@ -174,7 +200,7 @@ impl ServerState {
 
     fn on_change(&mut self, event: ChangeEvent) -> ControlFlow<async_lsp::Result<()>> {
         // we don't want to send what we just received otherwise we create an infinite loop between clients
-        self.ignore_queue_send.send(event.0).unwrap();
+        self.ignore_queue_send.send(event).unwrap();
         ControlFlow::Continue(())
     }
 }
@@ -204,7 +230,10 @@ async fn main() -> anyhow::Result<()> {
                     match msg {
                         ServerMessage::Common(common_message) => match common_message {
                             CommonMessage::Change(change) => {
-                                if client.emit(ChangeEvent(change.change.clone())).is_err() {
+                                if client
+                                    .emit(ChangeEvent::new(change.change.clone()))
+                                    .is_err()
+                                {
                                     break;
                                 }
                                 client
