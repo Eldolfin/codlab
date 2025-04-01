@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use anyhow::Context;
 use codlab::{
-    common::init_logger,
+    logger,
     messages::{ClientMessage, ServerMessage},
 };
 use futures::{future::join_all, stream::SplitSink, SinkExt, StreamExt, TryStreamExt as _};
@@ -22,7 +22,7 @@ struct Client {
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
-    init_logger();
+    logger::init("codlab-server");
 
     info!("Listening at ws://{LISTEN_ADDR}");
     let listener = TcpListener::bind(LISTEN_ADDR)
@@ -72,6 +72,12 @@ async fn main() -> anyhow::Result<()> {
                     ClientMessage::Common(common_message) => {
                         match &common_message {
                             codlab::messages::CommonMessage::Change(change) => {
+                                {
+                                    let len = change.change.content_changes.len();
+                                    if len != 1 {
+                                        error!("Change buffereing detected (len = {len})");
+                                    }
+                                }
                                 let change = &change.change.content_changes[0];
                                 let range = change.range.unwrap();
                                 debug!(

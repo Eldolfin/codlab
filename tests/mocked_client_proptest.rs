@@ -6,7 +6,7 @@ use assert_cmd::cargo::CommandCargoExt as _;
 use async_lsp::lsp_types::{
     DidChangeTextDocumentParams, Position, Range, TextDocumentContentChangeEvent, Url,
 };
-use codlab::common::init_logger;
+use codlab::{init_logger, logger};
 use common::lsp_client;
 use proptest::collection::vec;
 use proptest::{prelude::Arbitrary, prop_compose, proptest, test_runner::TestRunner};
@@ -102,7 +102,7 @@ fn test_mocked_clients_quickcheck_sync() -> proptest::test_runner::TestCaseResul
             .spawn()
             .expect("could not spawn server");
     let mut runner = TestRunner::default();
-    init_logger();
+    logger::init("tests");
     let tokio_runtime = tokio::runtime::Builder::new_current_thread()
         .enable_time()
         .build()

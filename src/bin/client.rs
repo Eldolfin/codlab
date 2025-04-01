@@ -5,7 +5,7 @@ use async_lsp::{
     lsp_types::{
         DidChangeConfigurationParams, DidChangeTextDocumentParams, DidOpenTextDocumentParams,
         InitializeParams, InitializeResult, ServerCapabilities, TextDocumentContentChangeEvent,
-        TextDocumentSyncCapability::Kind, TextDocumentSyncKind,
+        TextDocumentSyncCapability::Kind, TextDocumentSyncKind, Url,
     },
     panic::CatchUnwindLayer,
     router::Router,
@@ -14,8 +14,7 @@ use async_lsp::{
     ClientSocket, LanguageClient, LanguageServer, ResponseError,
 };
 use codlab::{
-    change_event_to_workspace_edit,
-    common::init_logger,
+    change_event_to_workspace_edit, logger,
     messages::{Change, ClientMessage, CommonMessage, ServerMessage},
     peekable_channel::PeekableReceiver,
 };
@@ -26,7 +25,6 @@ use std::{
         mpsc::{self, Sender},
         Arc,
     },
-    time::{Duration, Instant},
 };
 use tokio::sync::Mutex;
 use tokio_tungstenite::{connect_async, WebSocketStream};
@@ -37,19 +35,24 @@ use uuid::Uuid;
 // TODO: add configuration?
 // const SERVER_ADDR: &str = "ws://192.168.101.194:7575";
 const SERVER_ADDR: &str = "ws://127.0.0.1:7575";
-// after this amount of time, we assume the editor didn't send back the change we just asked it to apply
-const CHANGES_QUEUE_TIMEOUT: std::time::Duration = Duration::from_millis(200);
 
 type CodelabServer = SplitSink<
     WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
     tokio_tungstenite::tungstenite::Message,
 >;
+
+#[derive(PartialEq, Eq)]
+struct UnitChange {
+    pub text_document: Url,
+    pub change: TextDocumentContentChangeEvent,
+}
+
 struct ServerState {
     client: ClientSocket,
     codelab_server: Arc<Mutex<CodelabServer>>,
-    ignore_queue_recv: PeekableReceiver<ChangeEvent>,
-    ignore_queue_send: Sender<ChangeEvent>,
-    ignore_pool: Vec<ChangeEvent>,
+    ignore_queue_recv: PeekableReceiver<UnitChange>,
+    ignore_queue_send: Sender<UnitChange>,
+    ignore_pool: Vec<UnitChange>,
 }
 
 impl LanguageServer for ServerState {
@@ -87,41 +90,53 @@ impl LanguageServer for ServerState {
     }
 
     fn did_change(&mut self, params: DidChangeTextDocumentParams) -> Self::NotifyResult {
-        while let Ok(ignore) = self.ignore_queue_recv.try_recv() {
-            self.ignore_pool.push(ignore);
-        }
         // forget old enough changes, assume the editor didn't respond for some reason
-        self.ignore_pool.retain(ChangeEvent::is_recent);
-        if let Some(i) = self
-            .ignore_pool
+        let canceled_indices: Vec<_> = params
+            .content_changes
             .iter()
             .enumerate()
-            .find(|(_, change)| changes_eq(&change.change, &params))
+            .filter(|(_, a)| {
+                if self
+                    .ignore_queue_recv
+                    .try_recv_peek()
+                    .unwrap()
+                    .is_some_and(|b| {
+                        params.text_document.uri == b.text_document
+                            && content_changes_eq(a, &b.change)
+                    })
+                {
+                    self.ignore_queue_recv.try_recv().unwrap();
+                    true
+                } else {
+                    false
+                }
+            })
             .map(|(i, _)| i)
-        // if self
-        //     .ignore_queue_recv
-        //     .try_recv_peek()
-        //     .unwrap()
-        //     .is_some_and(|change| changes_eq(change, &params))
-        {
-            self.ignore_pool.remove(i);
-            // self.ignore_queue_recv.try_recv().unwrap();
-            info!("Ignoring next change as it was received");
-            return ControlFlow::Continue(());
-        }
-        tokio::spawn({
-            let send = self.codelab_server.clone();
-            async move {
-                client_send_msg(
-                    &send,
-                    &ClientMessage::Common(CommonMessage::Change(Change {
-                        change: params,
-                        id: Uuid::new_v4(),
-                    })),
-                )
-                .await;
+            .collect();
+        let filtered = {
+            let mut res = params.clone();
+            for i in canceled_indices.iter().rev() {
+                res.content_changes.remove(*i);
             }
-        });
+            res
+        };
+        if filtered.content_changes.is_empty() {
+            debug!("Canceled entire message");
+        } else {
+            tokio::spawn({
+                let send = self.codelab_server.clone();
+                async move {
+                    client_send_msg(
+                        &send,
+                        &ClientMessage::Common(CommonMessage::Change(Change {
+                            change: filtered,
+                            id: Uuid::new_v4(),
+                        })),
+                    )
+                    .await;
+                }
+            });
+        }
         ControlFlow::Continue(())
     }
 }
@@ -157,29 +172,6 @@ fn changes_eq(a: &DidChangeTextDocumentParams, b: &DidChangeTextDocumentParams) 
     eq
 }
 
-#[derive(Debug)]
-struct ChangeEvent {
-    change: DidChangeTextDocumentParams,
-    received_at: Instant,
-}
-
-impl ChangeEvent {
-    fn new(change: DidChangeTextDocumentParams) -> Self {
-        Self {
-            change,
-            received_at: Instant::now(),
-        }
-    }
-
-    fn is_recent(&self) -> bool {
-        let recent = Instant::now().duration_since(self.received_at) < CHANGES_QUEUE_TIMEOUT;
-        if !recent {
-            debug!("The editor didn't respond to this change: {:?}", &self);
-        }
-        recent
-    }
-}
-
 impl ServerState {
     fn new_router(
         editor_client: ClientSocket,
@@ -198,15 +190,27 @@ impl ServerState {
         router
     }
 
-    fn on_change(&mut self, event: ChangeEvent) -> ControlFlow<async_lsp::Result<()>> {
+    fn on_change(
+        &mut self,
+        event: DidChangeTextDocumentParams,
+    ) -> ControlFlow<async_lsp::Result<()>> {
         // we don't want to send what we just received otherwise we create an infinite loop between clients
-        self.ignore_queue_send.send(event).unwrap();
+        for sub_change in event.content_changes {
+            self.ignore_queue_send
+                .send(UnitChange {
+                    text_document: event.text_document.uri.clone(),
+                    change: sub_change,
+                })
+                .unwrap();
+        }
         ControlFlow::Continue(())
     }
 }
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
+    // TODO: retries (usefull for development)
+    // TODO: connecting to the server should be done after handshaking the lsp-client
     let (ws, _) = connect_async(SERVER_ADDR)
         .await
         .context("Could not connect to server")?;
@@ -216,7 +220,6 @@ async fn main() -> anyhow::Result<()> {
     let (server, _) = async_lsp::MainLoop::new_server(|client| {
         tokio::spawn({
             let mut client = client.clone();
-            let send = send.clone();
             async move {
                 while let Some(msg) = recv
                     .try_next()
@@ -230,10 +233,7 @@ async fn main() -> anyhow::Result<()> {
                     match msg {
                         ServerMessage::Common(common_message) => match common_message {
                             CommonMessage::Change(change) => {
-                                if client
-                                    .emit(ChangeEvent::new(change.change.clone()))
-                                    .is_err()
-                                {
+                                if client.emit(change.change.clone()).is_err() {
                                     break;
                                 }
                                 client
@@ -241,11 +241,6 @@ async fn main() -> anyhow::Result<()> {
                                     .await
                                     .unwrap();
                                 debug!("client: applied remote edit successfully!");
-                                // client_send_msg(
-                                //     &send,
-                                //     &ClientMessage::AcknowledgeChange(change.id),
-                                // )
-                                // .await;
                             }
                         },
                     }
@@ -263,7 +258,7 @@ async fn main() -> anyhow::Result<()> {
             .service(ServerState::new_router(client, send))
     });
 
-    init_logger();
+    logger::init("codlab-client");
 
     // Prefer truly asynchronous piped stdin/stdout without blocking tasks.
     #[cfg(unix)]
@@ -278,9 +273,12 @@ async fn main() -> anyhow::Result<()> {
         tokio_util::compat::TokioAsyncWriteCompatExt::compat_write(tokio::io::stdout()),
     );
 
-    match server.run_buffered(stdin, stdout).await {
+    let res = match server.run_buffered(stdin, stdout).await {
         Ok(()) => Ok(()),
         Err(async_lsp::Error::Eof) => Ok(()),
         Err(err) => Err(anyhow!("Failed to run on stdio: {err:#?}")),
-    }
+    };
+    // TODO: shutdown telemetry here
+
+    res
 }

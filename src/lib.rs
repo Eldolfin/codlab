@@ -1,10 +1,11 @@
-pub mod common;
+pub mod logger;
 pub mod messages;
 pub mod peekable_channel;
+#[cfg(feature = "telemetry")]
+pub mod telemetry;
 
 use std::collections::HashMap;
 
-use anyhow::Context;
 use async_lsp::lsp_types::{
     ApplyWorkspaceEditParams, DidChangeTextDocumentParams, TextEdit, WorkspaceEdit,
 };
