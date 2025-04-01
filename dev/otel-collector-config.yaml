@@ -1,0 +1,33 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+exporters:
+  otlp:
+    endpoint: "jaeger:14250"
+    tls:
+      insecure: true
+
+  prometheus:
+    endpoint: "0.0.0.0:9464"  # OpenTelemetry default Prometheus port
+
+  debug:
+    verbosity: detailed
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      exporters: [debug, otlp]
+
+    logs:
+      receivers: [otlp]
+      exporters: [debug]
+
+    metrics:
+      receivers: [otlp]
+      exporters: [debug, prometheus]

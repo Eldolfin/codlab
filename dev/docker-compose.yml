@@ -1,9 +1,28 @@
 name: codlab dev
 services:
-    all-in-one:
-        ports:
-            - 6831:6831/udp
-            - 6832:6832/udp
-            - 16686:16686
-            - 14268:14268
-        image: jaegertracing/all-in-one:latest
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    ports:
+      - "6831:6831/udp"
+      - "6832:6832/udp"
+      - "16686:16686"
+      - "14268:14268"
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    command: [ "--config", "/etc/otel-collector-config.yaml" ]
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+      - "9464:9464"
+
+  victoriametrics:
+    image: victoriametrics/victoria-metrics:latest
+    ports:
+      - "8428:8428"
+    command:
+      - "--promscrape.config=/etc/prometheus.yml"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus.yml

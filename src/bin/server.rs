@@ -22,7 +22,10 @@ struct Client {
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
-    logger::init("codlab-server");
+    #[cfg(feature = "telemetry")]
+    let telemetry_providers = codlab::telemetry::init("codlab-server");
+    #[cfg(not(feature = "telemetry"))]
+    logger::init();
 
     info!("Listening at ws://{LISTEN_ADDR}");
     let listener = TcpListener::bind(LISTEN_ADDR)
@@ -114,5 +117,7 @@ async fn main() -> anyhow::Result<()> {
             clients.lock().await.remove(&peer_addr);
         });
     }
+    #[cfg(feature = "telemetry")]
+    telemetry_providers.shutdown()?;
     Ok(())
 }

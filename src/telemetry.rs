@@ -6,24 +6,28 @@ use opentelemetry::KeyValue;
 use opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge;
 use opentelemetry_otlp::SpanExporter;
 use opentelemetry_otlp::WithExportConfig;
-use opentelemetry_otlp::WithExportConfig as _;
 use opentelemetry_otlp::{LogExporter, MetricExporter, Protocol};
 use opentelemetry_sdk::trace::SdkTracerProvider;
 use opentelemetry_sdk::{logs::SdkLoggerProvider, metrics::SdkMeterProvider, Resource};
 use tracing::info;
-use tracing::instrument::WithSubscriber;
-use tracing::Subscriber;
 use tracing_subscriber::{
     fmt::SubscriberBuilder, layer::SubscriberExt as _, util::SubscriberInitExt as _, EnvFilter,
     Layer,
 };
 
-const TELEMETRY_ENDPOINT_BASE: &str = "http://localhost:14268/api";
+const TRACES_ENDPOINT: &str = "http://localhost:4317";
+const METRICS_ENDPOINT: &str = "http://localhost:4317/v1/metrics";
+
+pub struct Providers {
+    logs: SdkLoggerProvider,
+    traces: SdkTracerProvider,
+    metrics: SdkMeterProvider,
+}
 
 fn init_logs(resource: Resource) -> SdkLoggerProvider {
     let exporter = LogExporter::builder()
-        .with_http()
-        .with_endpoint(format!("{TELEMETRY_ENDPOINT_BASE}/v2/spans"))
+        .with_tonic()
+        // .with_endpoint(TRACES_ENDPOINT)
         .build()
         .expect("Failed to create log exporter");
 
@@ -34,10 +38,10 @@ fn init_logs(resource: Resource) -> SdkLoggerProvider {
 }
 
 fn init_traces(resource: Resource) -> SdkTracerProvider {
+    // FIXME: collect traces?
     let exporter = SpanExporter::builder()
-        .with_http()
-        .with_endpoint(format!("{TELEMETRY_ENDPOINT_BASE}/v1/traces"))
-        .with_protocol(Protocol::HttpBinary) //can be changed to `Protocol::HttpJson` to export in JSON format
+        .with_tonic()
+        // .with_endpoint(TRACES_ENDPOINT)
         .build()
         .expect("Failed to create trace exporter");
 
@@ -48,10 +52,9 @@ fn init_traces(resource: Resource) -> SdkTracerProvider {
 }
 
 fn init_metrics(resource: Resource) -> SdkMeterProvider {
-    // FIXME: can't put metrics in jaeger?
     let exporter = MetricExporter::builder()
-        .with_http()
-        .with_protocol(Protocol::HttpBinary) //can be changed to `Protocol::HttpJson` to export in JSON format
+        .with_tonic()
+        // .with_endpoint(METRICS_ENDPOINT)
         .build()
         .expect("Failed to create metric exporter");
 
@@ -61,10 +64,10 @@ fn init_metrics(resource: Resource) -> SdkMeterProvider {
         .build()
 }
 
-pub fn init(service_name: &'static str) {
+pub fn init(service_name: &'static str) -> Providers {
     let resource = Resource::builder().with_service_name(service_name).build();
-    let exporter = init_logs(resource.clone());
-    let otel_layer = OpenTelemetryTracingBridge::new(&exporter);
+    let logger_provider = init_logs(resource.clone());
+    let otel_layer = OpenTelemetryTracingBridge::new(&logger_provider);
 
     // https://github.com/open-telemetry/opentelemetry-rust/blob/7bdd2f4160438b9a4cbf3092057f3e7dc9a6a95f/opentelemetry-otlp/examples/basic-otlp-http/src/main.rs#L75
     let filter_otel = EnvFilter::new("info")
@@ -123,5 +126,39 @@ pub fn init(service_name: &'static str) {
         });
     });
 
-    // TODO: shutdown telemetry
+    Providers {
+        traces: tracer_provider,
+        metrics: meter_provider,
+        logs: logger_provider,
+    }
+    .shutdown()
+    .unwrap();
+    todo!()
+}
+
+impl Providers {
+    pub fn shutdown(self) -> anyhow::Result<()> {
+        // Collect all shutdown errors
+        let mut shutdown_errors = Vec::new();
+        if let Err(e) = self.traces.shutdown() {
+            shutdown_errors.push(format!("tracer provider: {}", e));
+        }
+
+        if let Err(e) = self.metrics.shutdown() {
+            shutdown_errors.push(format!("meter provider: {}", e));
+        }
+
+        if let Err(e) = self.logs.shutdown() {
+            shutdown_errors.push(format!("logger provider: {}", e));
+        }
+
+        // Return an error if any shutdown failed
+        if !shutdown_errors.is_empty() {
+            return Err(anyhow::anyhow!(
+                "Failed to shutdown providers:\n{}",
+                shutdown_errors.join("\n")
+            ));
+        }
+        Ok(())
+    }
 }
