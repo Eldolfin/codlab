@@ -14,7 +14,7 @@ futures = "0.3.31"
 operational-transform = "0.6.1"
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
-tokio = { version = "1.44.1", features = ["macros", "rt", "sync", "time"] }
+tokio = { version = "1.44.1", features = ["full"] }
 tokio-tungstenite = "0.26.2"
 tower = "0.5.2"
 tracing = "0.1.41"
@@ -24,7 +24,7 @@ uuid = { version = "1.16.0", features = ["serde", "v4"] }
 
 # Telemetry
 opentelemetry = { version = "0.29.0", optional = true }
-opentelemetry-otlp = { version = "0.29.0", optional = true, features = ["grpc-tonic", "tonic"] }
+opentelemetry-otlp = { version = "0.29.0", optional = true, features = ["grpc-tonic"] }
 opentelemetry-appender-tracing = { version = "0.29.1", optional = true }
 opentelemetry_sdk = { version = "0.29.0", optional = true }
 

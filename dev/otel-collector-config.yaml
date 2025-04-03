@@ -7,7 +7,7 @@ receivers:
         endpoint: 0.0.0.0:4318
 
 exporters:
-  otlp:
+  otlp/jaeger:
     endpoint: "jaeger:14250"
     tls:
       insecure: true
@@ -22,7 +22,7 @@ service:
   pipelines:
     traces:
       receivers: [otlp]
-      exporters: [debug, otlp]
+      exporters: [debug, otlp/jaeger]
 
     logs:
       receivers: [otlp]
