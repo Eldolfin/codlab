@@ -207,7 +207,7 @@ impl ServerState {
     }
 }
 
-#[tokio::main(flavor = "current_thread")]
+#[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // TODO: retries (usefull for development)
     // TODO: connecting to the server should be done after handshaking the lsp-client

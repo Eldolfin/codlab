@@ -20,7 +20,7 @@ struct Client {
     id: u32,
 }
 
-#[tokio::main(flavor = "current_thread")]
+#[tokio::main]
 async fn main() -> anyhow::Result<()> {
     #[cfg(feature = "telemetry")]
     let telemetry_providers = codlab::telemetry::init("codlab-server");

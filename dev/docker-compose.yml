@@ -7,6 +7,9 @@ services:
       - "6832:6832/udp"
       - "16686:16686"
       - "14268:14268"
+    environment:
+      JAEGER_SAMPLER_TYPE: const
+      JAEGER_SAMPLER_PARAM: 1
 
   otel-collector:
     image: otel/opentelemetry-collector-contrib:latest
