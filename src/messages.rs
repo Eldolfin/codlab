@@ -6,6 +6,7 @@ use uuid::Uuid;
 pub struct Change {
     pub id: Uuid,
     pub change: DidChangeTextDocumentParams,
+    pub trace_context: std::collections::HashMap<String, String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

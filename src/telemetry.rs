@@ -1,33 +1,23 @@
 use opentelemetry::global;
-use opentelemetry::trace::TraceContextExt as _;
-use opentelemetry::trace::Tracer as _;
-use opentelemetry::InstrumentationScope;
-use opentelemetry::KeyValue;
 use opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge;
 use opentelemetry_otlp::SpanExporter;
-use opentelemetry_otlp::WithExportConfig;
-use opentelemetry_otlp::{LogExporter, MetricExporter, Protocol};
+use opentelemetry_otlp::{LogExporter, MetricExporter};
 use opentelemetry_sdk::trace::SdkTracerProvider;
 use opentelemetry_sdk::{logs::SdkLoggerProvider, metrics::SdkMeterProvider, Resource};
-use tracing::info;
 use tracing_subscriber::{
-    fmt::SubscriberBuilder, layer::SubscriberExt as _, util::SubscriberInitExt as _, EnvFilter,
-    Layer,
+    layer::SubscriberExt as _, util::SubscriberInitExt as _, EnvFilter, Layer,
 };
-
-const TRACES_ENDPOINT: &str = "http://localhost:4317";
-const METRICS_ENDPOINT: &str = "http://localhost:4317/v1/metrics";
 
 pub struct Providers {
     logs: SdkLoggerProvider,
     traces: SdkTracerProvider,
     metrics: SdkMeterProvider,
+    is_shutdown: bool,
 }
 
 fn init_logs(resource: Resource) -> SdkLoggerProvider {
     let exporter = LogExporter::builder()
         .with_tonic()
-        // .with_endpoint(TRACES_ENDPOINT)
         .build()
         .expect("Failed to create log exporter");
 
@@ -38,10 +28,8 @@ fn init_logs(resource: Resource) -> SdkLoggerProvider {
 }
 
 fn init_traces(resource: Resource) -> SdkTracerProvider {
-    // FIXME: collect traces?
     let exporter = SpanExporter::builder()
         .with_tonic()
-        // .with_endpoint(TRACES_ENDPOINT)
         .build()
         .expect("Failed to create trace exporter");
 
@@ -54,7 +42,6 @@ fn init_traces(resource: Resource) -> SdkTracerProvider {
 fn init_metrics(resource: Resource) -> SdkMeterProvider {
     let exporter = MetricExporter::builder()
         .with_tonic()
-        // .with_endpoint(METRICS_ENDPOINT)
         .build()
         .expect("Failed to create metric exporter");
 
@@ -93,51 +80,16 @@ pub fn init(service_name: &'static str) -> Providers {
     let meter_provider = init_metrics(resource.clone());
     global::set_meter_provider(meter_provider.clone());
 
-    let common_scope_attributes = vec![KeyValue::new("scope-key", "scope-value")];
-    let scope = InstrumentationScope::builder("basic")
-        .with_version("1.0")
-        .with_attributes(common_scope_attributes)
-        .build();
-
-    let tracer = global::tracer_with_scope(scope.clone());
-    let meter = global::meter_with_scope(scope);
-
-    let counter = meter
-        .u64_counter("test_counter")
-        .with_description("a simple counter for demo purposes.")
-        .with_unit("my_unit")
-        .build();
-
-    counter.add(1, &[KeyValue::new("test_key", "test_value")]);
-    tracer.in_span("Main operation", |cx| {
-        let span = cx.span();
-        span.add_event(
-            "Nice operation!".to_string(),
-            vec![KeyValue::new("some.key", 100)],
-        );
-        span.set_attribute(KeyValue::new("another.key", "yes"));
-
-        info!(target: "my-target", "hello from {}. My price is {}. I am also inside a Span!", "banana", 2.99);
-
-        tracer.in_span("Sub operation...", |cx| {
-            let span = cx.span();
-            span.set_attribute(KeyValue::new("another.key", "yes"));
-            span.add_event("Sub span event", vec![]);
-        });
-    });
-
     Providers {
         traces: tracer_provider,
         metrics: meter_provider,
         logs: logger_provider,
+        is_shutdown: false,
     }
-    .shutdown()
-    .unwrap();
-    todo!()
 }
 
 impl Providers {
-    pub fn shutdown(self) -> anyhow::Result<()> {
+    pub fn shutdown(mut self) -> anyhow::Result<()> {
         // Collect all shutdown errors
         let mut shutdown_errors = Vec::new();
         if let Err(e) = self.traces.shutdown() {
@@ -159,6 +111,15 @@ impl Providers {
                 shutdown_errors.join("\n")
             ));
         }
+        self.is_shutdown = true;
         Ok(())
+    }
+}
+
+impl Drop for Providers {
+    fn drop(&mut self) {
+        if !self.is_shutdown {
+            panic!("Telemetry providers was dropped without being shutdown!");
+        }
     }
 }

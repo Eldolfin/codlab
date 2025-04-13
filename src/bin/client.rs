@@ -19,7 +19,15 @@ use codlab::{
     peekable_channel::PeekableReceiver,
 };
 use futures::{future::BoxFuture, stream::SplitSink, SinkExt, StreamExt as _, TryStreamExt};
+use opentelemetry::{
+    global,
+    trace::{TraceContextExt as _, Tracer},
+    KeyValue,
+};
+use opentelemetry::{global::ObjectSafeSpan, propagation::TextMapPropagator, trace::Span};
+use opentelemetry_sdk::propagation::TraceContextPropagator;
 use std::{
+    collections::HashMap,
     ops::ControlFlow,
     sync::{
         mpsc::{self, Sender},
@@ -47,7 +55,7 @@ struct UnitChange {
     pub change: TextDocumentContentChangeEvent,
 }
 
-struct ServerState {
+struct LSPServerState {
     client: ClientSocket,
     codelab_server: Arc<Mutex<CodelabServer>>,
     ignore_queue_recv: PeekableReceiver<UnitChange>,
@@ -55,7 +63,7 @@ struct ServerState {
     ignore_pool: Vec<UnitChange>,
 }
 
-impl LanguageServer for ServerState {
+impl LanguageServer for LSPServerState {
     type Error = ResponseError;
     type NotifyResult = ControlFlow<async_lsp::Result<()>>;
 
@@ -123,18 +131,31 @@ impl LanguageServer for ServerState {
         if filtered.content_changes.is_empty() {
             debug!("Canceled entire message");
         } else {
-            tokio::spawn({
-                let send = self.codelab_server.clone();
-                async move {
-                    client_send_msg(
-                        &send,
-                        &ClientMessage::Common(CommonMessage::Change(Change {
-                            change: filtered,
-                            id: Uuid::new_v4(),
-                        })),
-                    )
-                    .await;
-                }
+            global::tracer("LSPServerState").in_span("editor: DidChangeTextDocument", |cx| {
+                tokio::spawn({
+                    let send = self.codelab_server.clone();
+
+                    let propagator = TraceContextPropagator::new();
+                    let mut trace_context = HashMap::new();
+                    propagator.inject_context(&cx, &mut trace_context);
+                    let change = Change {
+                        id: Uuid::new_v4(),
+                        change: filtered,
+                        trace_context,
+                    };
+                    async move {
+                        let span = cx.span();
+                        span.add_event(
+                            "New change from editor",
+                            vec![KeyValue::new("change_id", change.id.to_string())],
+                        );
+                        client_send_msg(
+                            &send,
+                            &ClientMessage::Common(CommonMessage::Change(change)),
+                        )
+                        .await;
+                    }
+                });
             });
         }
         ControlFlow::Continue(())
@@ -172,7 +193,7 @@ fn changes_eq(a: &DidChangeTextDocumentParams, b: &DidChangeTextDocumentParams) 
     eq
 }
 
-impl ServerState {
+impl LSPServerState {
     fn new_router(
         editor_client: ClientSocket,
         codelab_server: Arc<Mutex<CodelabServer>>,
@@ -209,6 +230,11 @@ impl ServerState {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    #[cfg(feature = "telemetry")]
+    let telemetry_providers = codlab::telemetry::init("codlab-client");
+    #[cfg(not(feature = "telemetry"))]
+    logger::init();
+
     // TODO: retries (usefull for development)
     // TODO: connecting to the server should be done after handshaking the lsp-client
     let (ws, _) = connect_async(SERVER_ADDR)
@@ -233,6 +259,11 @@ async fn main() -> anyhow::Result<()> {
                     match msg {
                         ServerMessage::Common(common_message) => match common_message {
                             CommonMessage::Change(change) => {
+                                let extracted_ctx =
+                                    TraceContextPropagator::new().extract(&change.trace_context);
+                                let mut span = global::tracer("server")
+                                    .start_with_context("handle_change", &extracted_ctx);
+                                span.add_event("Apply remote change", vec![]);
                                 if client.emit(change.change.clone()).is_err() {
                                     break;
                                 }
@@ -255,10 +286,8 @@ async fn main() -> anyhow::Result<()> {
             .layer(CatchUnwindLayer::default())
             .layer(ConcurrencyLayer::default())
             .layer(ClientProcessMonitorLayer::new(client.clone()))
-            .service(ServerState::new_router(client, send))
+            .service(LSPServerState::new_router(client, send))
     });
-
-    logger::init("codlab-client");
 
     // Prefer truly asynchronous piped stdin/stdout without blocking tasks.
     #[cfg(unix)]
@@ -278,7 +307,6 @@ async fn main() -> anyhow::Result<()> {
         Err(async_lsp::Error::Eof) => Ok(()),
         Err(err) => Err(anyhow!("Failed to run on stdio: {err:#?}")),
     };
-    // TODO: shutdown telemetry here
 
-    res
+    res.and(telemetry_providers.shutdown())
 }

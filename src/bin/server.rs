@@ -1,11 +1,19 @@
-use std::{collections::HashMap, sync::Arc};
-
-use anyhow::Context;
-use codlab::{
-    logger,
-    messages::{ClientMessage, ServerMessage},
+use anyhow::Context as _;
+use codlab::messages::{ClientMessage, ServerMessage};
+use futures::{
+    future::join_all,
+    stream::{SplitSink, SplitStream},
+    SinkExt, StreamExt, TryStreamExt as _,
 };
-use futures::{future::join_all, stream::SplitSink, SinkExt, StreamExt, TryStreamExt as _};
+use opentelemetry::propagation::TextMapPropagator;
+use opentelemetry::trace::Span;
+use opentelemetry::{
+    global,
+    trace::{TraceContextExt as _, Tracer},
+    Context, KeyValue,
+};
+use opentelemetry_sdk::propagation::TraceContextPropagator;
+use std::{collections::HashMap, sync::Arc};
 use tokio::{
     net::{TcpListener, TcpStream},
     sync::Mutex,
@@ -32,6 +40,19 @@ async fn main() -> anyhow::Result<()> {
         .await
         .with_context(|| format!("Failed to bind at addr {LISTEN_ADDR}"))?;
 
+    global::tracer("Server main()")
+        .in_span("Accept clients loop", async |cx| {
+            accept_clients(cx, listener).await;
+        })
+        .await;
+
+    #[cfg(feature = "telemetry")]
+    telemetry_providers.shutdown()?;
+    Ok(())
+}
+
+async fn accept_clients(cx: Context, listener: TcpListener) {
+    let span = cx.span();
     let clients = Arc::new(Mutex::new(HashMap::new()));
 
     let mut id_incr = 0;
@@ -50,7 +71,7 @@ async fn main() -> anyhow::Result<()> {
                 break;
             }
         };
-        let (send, mut recv) = ws.split();
+        let (send, recv) = ws.split();
         let clients = clients.clone();
         let client_id = next_id();
         clients.lock().await.insert(
@@ -60,64 +81,94 @@ async fn main() -> anyhow::Result<()> {
                 id: client_id,
             },
         );
+        span.add_event(
+            "Accepted new client",
+            vec![
+                KeyValue::new("peer_addr", peer_addr.clone()),
+                KeyValue::new("client_id", client_id as i64),
+            ],
+        );
         tokio::spawn(async move {
-            while let Ok(Some(msg)) = recv
-                .try_next()
+            global::tracer("Server main loop")
+                .in_span("Handle client", async |cx| {
+                    handle_client(recv, peer_addr, client_id, clients).await
+                })
                 .await
-                .inspect_err(|_| info!("Client disconnected: {peer_addr}"))
-            {
-                // info!("received msg: {msg:#?}");
-                let msg: ClientMessage =
-                    serde_json::from_str(&msg.into_text().expect("Client sent a non text message"))
-                        .expect("Client sent an invalid message");
-                match msg {
-                    ClientMessage::AcknowledgeChange(uuid) => todo!(),
-                    ClientMessage::Common(common_message) => {
-                        match &common_message {
-                            codlab::messages::CommonMessage::Change(change) => {
-                                {
-                                    let len = change.change.content_changes.len();
-                                    if len != 1 {
-                                        error!("Change buffereing detected (len = {len})");
-                                    }
-                                }
-                                let change = &change.change.content_changes[0];
-                                let range = change.range.unwrap();
-                                debug!(
-                                    "#{}: ({}:{}):({}:{}) {:#?}",
-                                    client_id,
-                                    range.start.line,
-                                    range.start.character,
-                                    range.end.line,
-                                    range.end.character,
-                                    change.text
-                                );
-                            }
-                        }
-                        let msg = ServerMessage::Common(common_message);
-                        debug!("Broadcasting message...!");
-                        let mut lock = clients.lock().await;
-                        let futs: Vec<_> = lock
-                            .iter_mut()
-                            .filter(|(addr, _)| addr != &&peer_addr)
-                            .map(|(_, client)| {
-                                client.send.send(tungstenite::Message::Text(
-                                    serde_json::to_string(&msg)
-                                        .expect("To be able to construct a json")
-                                        .into(),
-                                ))
-                            })
-                            .collect();
-                        let peers = futs.len();
-                        join_all(futs).await;
-                        debug!("Broadcasted message to {} peers successfully!", peers);
-                    }
-                }
-            }
-            clients.lock().await.remove(&peer_addr);
         });
     }
-    #[cfg(feature = "telemetry")]
-    telemetry_providers.shutdown()?;
-    Ok(())
+}
+
+async fn handle_client(
+    mut recv: SplitStream<WebSocketStream<TcpStream>>,
+    peer_addr: String,
+    client_id: u32,
+    clients: Arc<Mutex<HashMap<String, Client>>>,
+) {
+    while let Ok(Some(msg)) = recv
+        .try_next()
+        .await
+        .inspect_err(|_| info!("Client disconnected: {peer_addr}"))
+    {
+        // info!("received msg: {msg:#?}");
+        let msg: ClientMessage =
+            serde_json::from_str(&msg.into_text().expect("Client sent a non text message"))
+                .expect("Client sent an invalid message");
+
+        handle_msg(&peer_addr, client_id, &clients, msg).await;
+    }
+    clients.lock().await.remove(&peer_addr);
+}
+
+async fn handle_msg(
+    peer_addr: &String,
+    client_id: u32,
+    clients: &Arc<Mutex<HashMap<String, Client>>>,
+    msg: ClientMessage,
+) {
+    match msg {
+        ClientMessage::AcknowledgeChange(uuid) => todo!(),
+        ClientMessage::Common(common_message) => match &common_message {
+            codlab::messages::CommonMessage::Change(change) => {
+                let extracted_ctx = TraceContextPropagator::new().extract(&change.trace_context);
+                let mut span =
+                    global::tracer("server").start_with_context("handle_change", &extracted_ctx);
+                {
+                    let len = change.change.content_changes.len();
+                    if len != 1 {
+                        error!("Change buffereing detected (len = {len})");
+                    }
+                }
+                span.add_event("Received message", vec![]);
+                let change = &change.change.content_changes[0];
+                let range = change.range.unwrap();
+                debug!(
+                    "#{}: ({}:{}):({}:{}) {:#?}",
+                    client_id,
+                    range.start.line,
+                    range.start.character,
+                    range.end.line,
+                    range.end.character,
+                    change.text
+                );
+                let msg = ServerMessage::Common(common_message);
+                debug!("Broadcasting message...!");
+                let mut lock = clients.lock().await;
+                let futs: Vec<_> = lock
+                    .iter_mut()
+                    .filter(|(addr, _)| addr != &peer_addr)
+                    .map(|(_, client)| {
+                        client.send.send(tungstenite::Message::Text(
+                            serde_json::to_string(&msg)
+                                .expect("To be able to construct a json")
+                                .into(),
+                        ))
+                    })
+                    .collect();
+                let peers = futs.len();
+                join_all(futs).await;
+                debug!("Broadcasted message to {} peers successfully!", peers);
+                span.add_event("Finished broadcasting the change event", vec![]);
+            }
+        },
+    }
 }
