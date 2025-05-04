@@ -2,6 +2,7 @@ test: {
   pkgs,
   self,
   system,
+  home-manager,
   ...
 }: let
   inherit (pkgs) lib;
@@ -14,7 +15,7 @@ in
       # This speeds up the evaluation by skipping evaluating documentation
       defaults.documentation.enable = lib.mkDefault false;
       enableOCR = true;
-      node.specialArgs = {inherit self;};
+      node.specialArgs = {inherit self home-manager system;};
       nodes = {
         server = _: {
           imports = [

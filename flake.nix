@@ -2,9 +2,9 @@
   inputs = {
     utils.url = "github:numtide/flake-utils";
     crane.url = "github:ipetkov/crane";
+    home-manager.url = "github:nix-community/home-manager";
   };
   outputs = {
-    self,
     nixpkgs,
     utils,
     ...
@@ -25,9 +25,9 @@
           inherit system;
         };
         checks = import ./nix/tests {
-          inherit self;
+          inherit (inputs) self home-manager;
           inherit system;
-          pkgs = nixpkgs.legacyPackages.${system};
+          inherit pkgs;
         };
       }
     );
