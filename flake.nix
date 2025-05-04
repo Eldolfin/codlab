@@ -29,6 +29,9 @@
             vscodium-fhs
           ];
         };
+        checks = import ./nix/tests {
+          pkgs = nixpkgs.legacyPackages.${system};
+        };
       }
     );
 }
