@@ -1,9 +1,15 @@
 {
-  pkgs,
   self,
   system,
   ...
 }: {
-  # TODO: nixos service
-  eldolfin.services.codlab-server.enable = true;
+  imports = [
+    self.nixosModules.${system}.default
+    ./virt.nix
+  ];
+
+  eldolfin.services.codlab-server = {
+    enable = true;
+    port = 7575;
+  };
 }

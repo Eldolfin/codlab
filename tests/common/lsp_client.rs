@@ -131,6 +131,7 @@ impl MockClient {
         let mut child = async_process::Command::from(
             Command::cargo_bin("client").expect("client binary to exist"),
         )
+        .arg("ws://127.0.0.1:7575")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())

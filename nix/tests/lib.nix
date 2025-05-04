@@ -18,10 +18,7 @@ in
       node.specialArgs = {inherit self home-manager system;};
       nodes = {
         server = _: {
-          imports = [
-            self.nixosModules.${system}.default
-            ./common/server.nix
-          ];
+          imports = [./common/server.nix];
         };
         client1 = _: {
           imports = [./common/client.nix];

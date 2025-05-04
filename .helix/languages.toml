@@ -4,5 +4,5 @@ name = "markdown"
 
 [language-server.codlab]
 command = "cargo"
-args = ["run", "-q", "--bin", "client"]
+args = ["run", "-q", "--bin", "client", "--", "127.0.0.1"]
 

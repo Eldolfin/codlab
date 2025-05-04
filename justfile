@@ -9,3 +9,6 @@ book:
 
 vscode-extension:
     cd ./editors/vscode && vsce package --allow-star-activation --skip-license
+
+nixos-test-interactive:
+    nix build .#checks.x86_64-linux.simple.driverInteractive && ./result/bin/nixos-test-driver
