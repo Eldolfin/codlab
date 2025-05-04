@@ -13,6 +13,7 @@ use async_lsp::{
     tracing::TracingLayer,
     ClientSocket, LanguageClient, LanguageServer, ResponseError,
 };
+use clap::Parser;
 use codlab::{
     change_event_to_workspace_edit,
     common::init_logger,
@@ -34,9 +35,6 @@ use tower::ServiceBuilder;
 use tracing::{debug, info};
 use uuid::Uuid;
 
-// TODO: add configuration?
-// const SERVER_ADDR: &str = "ws://192.168.101.194:7575";
-const SERVER_ADDR: &str = "ws://127.0.0.1:7575";
 // after this amount of time, we assume the editor didn't send back the change we just asked it to apply
 const CHANGES_QUEUE_TIMEOUT: std::time::Duration = Duration::from_millis(200);
 
@@ -205,9 +203,15 @@ impl ServerState {
     }
 }
 
+#[derive(Parser)]
+struct Args {
+    server_addr: String,
+}
+
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
-    let (ws, _) = connect_async(SERVER_ADDR)
+    let args = Args::parse();
+    let (ws, _) = connect_async(args.server_addr)
         .await
         .context("Could not connect to server")?;
     let (send, mut recv) = ws.split();
