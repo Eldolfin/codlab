@@ -11,7 +11,7 @@
       language-server = {
         codlab = {
           command = lib.getExe' self.packages.${system}.codlab "client";
-          args = ["server"];
+          args = ["ws://server:7575"];
         };
       };
       language = [

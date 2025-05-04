@@ -9,6 +9,7 @@
     home-manager.nixosModules.home-manager
     ./auto-login.nix
     ./wm.nix
+    ./virt.nix
   ];
   home-manager = {
     useGlobalPkgs = true;
@@ -21,22 +22,13 @@
   };
   environment.systemPackages = with pkgs; [
     self.packages.${system}.codlab
-    wezterm
+    kitty
 
     helix
     neovim
     vscodium-fhs
   ];
 
-  virtualisation = {
-    memorySize = 4096;
-    diskSize = 8192;
-    cores = 6;
-    resolution = {
-      x = 1920;
-      y = 1080;
-    };
-  };
   users.users.alice = {
     isNormalUser = true;
     description = "Alice Foobar";
