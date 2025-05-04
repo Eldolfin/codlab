@@ -6,3 +6,4 @@ book/book
 .nixos-test-history
 result
 *.png
+*.mkv

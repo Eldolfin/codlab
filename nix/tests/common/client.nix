@@ -22,8 +22,12 @@
   };
   environment.systemPackages = with pkgs; [
     self.packages.${system}.codlab
-    kitty
 
+    # test utils
+    kitty
+    killall
+
+    # editors
     helix
     neovim
     vscodium-fhs

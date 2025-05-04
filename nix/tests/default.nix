@@ -1,3 +1,3 @@
 checkArgs: {
-  simple = import ./cases/simple.nix checkArgs;
+  simple = import ./simple.nix checkArgs;
 }
