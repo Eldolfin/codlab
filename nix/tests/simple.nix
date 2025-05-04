@@ -2,7 +2,9 @@
   name = "simple";
   testScript = ''
     start_all()
-    c.wait_for_unit("graphical.target")
+    client1.wait_for_unit("graphical.target")
+    client2.wait_for_unit("graphical.target")
+    # TODO: record video
     # c.sleep(60)
     # # open terminal
     # c.send_key("meta_l-ret")
@@ -13,6 +15,7 @@
     # for _ in range(4): c.send_key("ctrl-shift-minus", delay=0.1)
     # c.send_chars("fastfetch\n")
     # c.sleep(30)
-    c.screenshot("${name}")
+    client1.screenshot("${name}")
+    client2.screenshot("${name}")
   '';
 }
