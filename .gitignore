@@ -7,3 +7,4 @@ book/book
 result
 *.png
 *.mkv
+ci-output

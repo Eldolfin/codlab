@@ -1,3 +1,5 @@
+CI_OUTPUT := "ci-output"
+
 # List available recipes
 default:
     @just --list
@@ -26,9 +28,17 @@ nixos-test-interactive:
 ci:
     #!/usr/bin/env bash
     set -e
+    mkdir -p {{CI_OUTPUT}}
     TESTS=$(nix flake show --all-systems --json | jq -r '.checks."x86_64-linux" | keys[]')
-    printf "\033[1;34mRunning tests: \033[1;33m%s\033[0m\n" "[$(echo "$TESTS" | paste -sd, -)]"
+    printf "{{BLUE}}Running tests: {{YELLOW}}[$(echo "$TESTS" | paste -sd, -)]{{NORMAL}}\n"
     for test in $TESTS; do
-        printf "\033[1;34mRunning test \033[1;33m%s\033[0m\n" "$test"
+        printf "{{BLUE}}Running test {{YELLOW}}%s{{NORMAL}}\n" "$test"
         nix build -L .#checks.x86_64-linux.$test
+        if [ "$test" != "pre-commit-check" ]; then
+            printf "{{BLUE}}Concatenating videos of clients{{NORMAL}}\n"
+            find result/client* -name '*.mkv' |
+                sort |
+                xargs -I{} echo -i {} |
+                xargs ffmpeg -filter_complex vstack {{CI_OUTPUT}}/$test.mp4
+        fi
     done
