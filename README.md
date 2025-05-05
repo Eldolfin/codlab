@@ -6,7 +6,7 @@ Goal: allowing easy cross-editor live collaboration
 
 ## Demo
 
-https://github.com/user-attachments/assets/eaa66fb2-4d6a-40a2-a5e9-34b7714f0609
+![Short demo video](https://github.com/user-attachments/assets/eaa66fb2-4d6a-40a2-a5e9-34b7714f0609)
 
 ## TODO
 

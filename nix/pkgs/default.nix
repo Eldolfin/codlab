@@ -6,8 +6,6 @@
 }: let
   pkgs = nixpkgs.legacyPackages.${system};
 
-  inherit (pkgs) lib;
-
   craneLib = crane.mkLib pkgs;
   src = craneLib.cleanCargoSource ../../.;
 
@@ -35,6 +33,6 @@
       inherit cargoArtifacts;
     });
 in {
-  codlab = codlab;
+  inherit codlab;
   default = codlab;
 }

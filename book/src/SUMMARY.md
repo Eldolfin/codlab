@@ -2,7 +2,7 @@
 
 - [README](README.md)
 
-# User documentation
+## User documentation
 
 - [Related projects](related-projects.md)
 - [Random links](random-links.md)
