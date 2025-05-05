@@ -2,7 +2,8 @@
   virtualisation = {
     qemu = {
       options = [
-        "-display gtk,zoom-to-fit=on,grab-on-hover=on"
+        # ci doesn't like it
+        # "-display gtk,zoom-to-fit=on,grab-on-hover=on"
       ];
     };
     memorySize = 4096;
