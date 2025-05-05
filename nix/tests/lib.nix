@@ -1,4 +1,4 @@
-test: {
+testFn: {
   pkgs,
   self,
   system,
@@ -7,6 +7,7 @@ test: {
 }: let
   inherit (pkgs) lib;
   nixos-lib = import (pkgs.path + "/nixos/lib") {};
+  test = testFn {inherit lib;};
 in
   (
     nixos-lib.runTest {
