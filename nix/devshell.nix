@@ -7,6 +7,7 @@ pkgs.mkShell {
     # tools
     act
     bacon
+    just
     mdbook
     vsce
     zellij

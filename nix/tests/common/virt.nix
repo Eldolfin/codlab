@@ -7,10 +7,10 @@
     };
     memorySize = 4096;
     diskSize = 8192;
-    cores = 6;
+    cores = 4;
     resolution = {
-      x = 1920;
-      y = 1080;
+      x = 1280;
+      y = 800;
     };
   };
 }

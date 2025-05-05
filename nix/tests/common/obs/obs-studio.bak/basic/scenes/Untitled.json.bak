@@ -1,35 +1,4 @@
 {
-    "DesktopAudioDevice1": {
-        "prev_ver": 520093698,
-        "name": "Desktop Audio",
-        "uuid": "f048da9b-46b9-4474-a435-5181fa8260e8",
-        "id": "pulse_output_capture",
-        "versioned_id": "pulse_output_capture",
-        "settings": {
-            "device_id": "default"
-        },
-        "mixers": 255,
-        "sync": 0,
-        "flags": 0,
-        "volume": 1.0,
-        "balance": 0.5,
-        "enabled": true,
-        "muted": false,
-        "push-to-mute": false,
-        "push-to-mute-delay": 0,
-        "push-to-talk": false,
-        "push-to-talk-delay": 0,
-        "hotkeys": {
-            "libobs.mute": [],
-            "libobs.unmute": [],
-            "libobs.push-to-mute": [],
-            "libobs.push-to-talk": []
-        },
-        "deinterlace_mode": 0,
-        "deinterlace_field_order": 0,
-        "monitoring_type": 0,
-        "private_settings": {}
-    },
     "current_scene": "Scene",
     "current_program_scene": "Scene",
     "scene_order": [
@@ -42,7 +11,7 @@
         {
             "prev_ver": 520093698,
             "name": "Scene",
-            "uuid": "c2a651bf-76a1-4941-a69d-87a413504571",
+            "uuid": "a67965e5-a37a-436e-8f5f-d3de0ebb846e",
             "id": "scene",
             "versioned_id": "scene",
             "settings": {
@@ -51,13 +20,13 @@
                 "items": [
                     {
                         "name": "Display Capture (XSHM)",
-                        "source_uuid": "2099c47a-3adb-45ea-a94a-809d6f8e1034",
+                        "source_uuid": "71dfb549-a7a9-4018-9788-265ff8d6e564",
                         "visible": true,
                         "locked": false,
                         "rot": 0.0,
                         "scale_ref": {
-                            "x": 1280.0,
-                            "y": 800.0
+                            "x": 1920.0,
+                            "y": 1080.0
                         },
                         "align": 5,
                         "bounds_type": 0,
@@ -74,7 +43,7 @@
                             "y": 0.0
                         },
                         "pos_rel": {
-                            "x": -1.6000000238418579,
+                            "x": -1.7777777910232544,
                             "y": -1.0
                         },
                         "scale": {
@@ -130,12 +99,11 @@
         {
             "prev_ver": 520093698,
             "name": "Display Capture (XSHM)",
-            "uuid": "2099c47a-3adb-45ea-a94a-809d6f8e1034",
+            "uuid": "71dfb549-a7a9-4018-9788-265ff8d6e564",
             "id": "xshm_input_v2",
             "versioned_id": "xshm_input_v2",
             "settings": {
-                "screen": 0,
-                "advanced": true
+                "screen": 0
             },
             "mixers": 0,
             "sync": 0,
@@ -208,6 +176,10 @@
             "active": false,
             "switches": []
         }
+    },
+    "resolution": {
+        "x": 1920,
+        "y": 1080
     },
     "version": 2
 }
