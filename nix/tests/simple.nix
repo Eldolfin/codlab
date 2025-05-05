@@ -31,7 +31,7 @@
     for client in clients:
       client.send_chars(f"oHello! My name is {client.name}")
       client.send_key("esc")
-      client.sleep(1)
+      client.sleep(3)
 
     for client in clients:
       # write file
