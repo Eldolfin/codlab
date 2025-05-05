@@ -23,7 +23,8 @@ for client in clients:
     )
 
 for client in clients:
-    client.sleep(3)
+    client.wait_until_succeeds("pgrep client")
+    client.sleep(1)
 
 # type some text
 for client in clients:
