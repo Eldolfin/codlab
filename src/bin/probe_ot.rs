@@ -8,7 +8,7 @@ fn main() {
     b.insert("def");
     let after_a = a.apply("").unwrap();
     let after_b = b.apply(&after_a).unwrap();
-    let c = a.compose(&b).unwrap();
+    let _c = a.compose(&b).unwrap();
     let after_ab = a.compose(&b).unwrap().apply("").unwrap();
     assert_eq!(after_ab, after_b);
 }

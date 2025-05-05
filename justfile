@@ -23,4 +23,3 @@ ci:
         printf "\033[1;34mRunning test \033[1;33m%s\033[0m\n" "$test"
         nix build .#checks.x86_64-linux.$test
     done
-

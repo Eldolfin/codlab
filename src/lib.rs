@@ -4,7 +4,6 @@ pub mod peekable_channel;
 
 use std::collections::HashMap;
 
-use anyhow::Context;
 use async_lsp::lsp_types::{
     ApplyWorkspaceEditParams, DidChangeTextDocumentParams, TextEdit, WorkspaceEdit,
 };

@@ -1,4 +1,4 @@
-use autosurgeon::{hydrate, reconcile, Hydrate, Reconcile};
+use autosurgeon::{Hydrate, Reconcile, hydrate, reconcile};
 
 #[derive(Debug, Clone, Reconcile, Hydrate, PartialEq)]
 struct Document {

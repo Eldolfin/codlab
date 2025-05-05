@@ -5,18 +5,19 @@ use codlab::{
     common::init_logger,
     messages::{ClientMessage, ServerMessage},
 };
-use futures::{future::join_all, stream::SplitSink, SinkExt, StreamExt, TryStreamExt as _};
+use futures::{SinkExt, StreamExt, TryStreamExt as _, future::join_all, stream::SplitSink};
 use tokio::{
     net::{TcpListener, TcpStream},
     sync::Mutex,
 };
-use tokio_tungstenite::{tungstenite, WebSocketStream};
+use tokio_tungstenite::{WebSocketStream, tungstenite};
 use tracing::{debug, error, info};
 // TODO: config
 const LISTEN_ADDR: &str = "0.0.0.0:7575";
 
 struct Client {
     send: SplitSink<WebSocketStream<TcpStream>, tokio_tungstenite::tungstenite::Message>,
+    #[allow(dead_code)]
     id: u32,
 }
 
@@ -68,7 +69,7 @@ async fn main() -> anyhow::Result<()> {
                     serde_json::from_str(&msg.into_text().expect("Client sent a non text message"))
                         .expect("Client sent an invalid message");
                 match msg {
-                    ClientMessage::AcknowledgeChange(uuid) => todo!(),
+                    ClientMessage::AcknowledgeChange(_uuid) => todo!(),
                     ClientMessage::Common(common_message) => {
                         match &common_message {
                             codlab::messages::CommonMessage::Change(change) => {

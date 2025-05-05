@@ -1,5 +1,6 @@
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use async_lsp::{
+    ClientSocket, LanguageClient, LanguageServer, ResponseError,
     client_monitor::ClientProcessMonitorLayer,
     concurrency::ConcurrencyLayer,
     lsp_types::{
@@ -11,7 +12,6 @@ use async_lsp::{
     router::Router,
     server::LifecycleLayer,
     tracing::TracingLayer,
-    ClientSocket, LanguageClient, LanguageServer, ResponseError,
 };
 use clap::Parser;
 use codlab::{
@@ -20,17 +20,17 @@ use codlab::{
     messages::{Change, ClientMessage, CommonMessage, ServerMessage},
     peekable_channel::PeekableReceiver,
 };
-use futures::{future::BoxFuture, stream::SplitSink, SinkExt, StreamExt as _, TryStreamExt};
+use futures::{SinkExt, StreamExt as _, TryStreamExt, future::BoxFuture, stream::SplitSink};
 use std::{
     ops::ControlFlow,
     sync::{
-        mpsc::{self, Sender},
         Arc,
+        mpsc::{self, Sender},
     },
     time::{Duration, Instant},
 };
 use tokio::sync::Mutex;
-use tokio_tungstenite::{connect_async, WebSocketStream};
+use tokio_tungstenite::{WebSocketStream, connect_async};
 use tower::ServiceBuilder;
 use tracing::{debug, info};
 use uuid::Uuid;
@@ -43,6 +43,7 @@ type CodelabServer = SplitSink<
     tokio_tungstenite::tungstenite::Message,
 >;
 struct ServerState {
+    #[allow(dead_code)]
     client: ClientSocket,
     codelab_server: Arc<Mutex<CodelabServer>>,
     ignore_queue_recv: PeekableReceiver<ChangeEvent>,
@@ -220,7 +221,7 @@ async fn main() -> anyhow::Result<()> {
     let (server, _) = async_lsp::MainLoop::new_server(|client| {
         tokio::spawn({
             let mut client = client.clone();
-            let send = send.clone();
+            let _send = send.clone();
             async move {
                 while let Some(msg) = recv
                     .try_next()
