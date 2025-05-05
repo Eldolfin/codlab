@@ -27,16 +27,13 @@ use std::{
         Arc,
         mpsc::{self, Sender},
     },
-    time::{Duration, Instant},
+    time::Instant,
 };
 use tokio::sync::Mutex;
 use tokio_tungstenite::{WebSocketStream, connect_async};
 use tower::ServiceBuilder;
 use tracing::{debug, info};
 use uuid::Uuid;
-
-// after this amount of time, we assume the editor didn't send back the change we just asked it to apply
-const CHANGES_QUEUE_TIMEOUT: std::time::Duration = Duration::from_millis(200);
 
 type CodelabServer = SplitSink<
     WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
@@ -89,8 +86,6 @@ impl LanguageServer for ServerState {
         while let Ok(ignore) = self.ignore_queue_recv.try_recv() {
             self.ignore_pool.push(ignore);
         }
-        // forget old enough changes, assume the editor didn't respond for some reason
-        self.ignore_pool.retain(ChangeEvent::is_recent);
         if let Some(i) = self
             .ignore_pool
             .iter()
@@ -159,23 +154,11 @@ fn changes_eq(a: &DidChangeTextDocumentParams, b: &DidChangeTextDocumentParams) 
 #[derive(Debug)]
 struct ChangeEvent {
     change: DidChangeTextDocumentParams,
-    received_at: Instant,
 }
 
 impl ChangeEvent {
     fn new(change: DidChangeTextDocumentParams) -> Self {
-        Self {
-            change,
-            received_at: Instant::now(),
-        }
-    }
-
-    fn is_recent(&self) -> bool {
-        let recent = Instant::now().duration_since(self.received_at) < CHANGES_QUEUE_TIMEOUT;
-        if !recent {
-            debug!("The editor didn't respond to this change: {:?}", &self);
-        }
-        recent
+        Self { change }
     }
 }
 
