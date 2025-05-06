@@ -28,7 +28,7 @@ nixos-test-interactive:
 ci:
     #!/usr/bin/env bash
     set -e
-    mkdir -p {{CI_OUTPUT}}
+    rm -rf {{CI_OUTPUT}} && mkdir -p {{CI_OUTPUT}}
     TESTS=$(nix flake show --all-systems --json | jq -r '.checks."x86_64-linux" | keys[]')
     printf "{{BLUE}}Running tests: {{YELLOW}}[$(echo "$TESTS" | paste -sd, -)]{{NORMAL}}\n"
     for test in $TESTS; do

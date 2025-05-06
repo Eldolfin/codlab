@@ -28,7 +28,7 @@ for client in clients:
 
 # type some text
 for client in clients:
-    client.send_chars(f"oHello! My name is {client.name}", delay=0.1)
+    client.send_chars(f"oHello! My name is {client.name}", delay=0.3)
     client.send_key("esc")
     client.sleep(3)
 
