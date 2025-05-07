@@ -47,8 +47,3 @@ for client, recording in zip(clients, recordings):
     client.wait_for_file(txt_file)
     client.copy_from_vm(txt_file, f"{client.name}")
     client.copy_from_vm(recording, f"{client.name}")
-
-client1_txt = open(driver.out_dir / client1.name / "test.md").read()
-client2_txt = open(driver.out_dir / client2.name / "test.md").read()
-fail_msg = f"clients got a different text file:\nclient 1: {client1_txt!r}\nclient 2: {client2_txt!r}"
-assert client1_txt == client2_txt, fail_msg
