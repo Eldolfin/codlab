@@ -15,6 +15,7 @@ pkgs.mkShell {
     # tools
     act
     bacon
+    ffmpeg
     just
     mdbook
     vsce
