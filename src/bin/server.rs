@@ -74,16 +74,19 @@ async fn main() -> anyhow::Result<()> {
                         match &common_message {
                             codlab::messages::CommonMessage::Change(change) => {
                                 let change = &change.change.content_changes[0];
-                                let range = change.range.unwrap();
-                                debug!(
-                                    "#{}: ({}:{}):({}:{}) {:#?}",
-                                    client_id,
-                                    range.start.line,
-                                    range.start.character,
-                                    range.end.line,
-                                    range.end.character,
-                                    change.text
-                                );
+                                if let Some(range) = change.range {
+                                    debug!(
+                                        "#{}: ({}:{}):({}:{}) {:#?}",
+                                        client_id,
+                                        range.start.line,
+                                        range.start.character,
+                                        range.end.line,
+                                        range.end.character,
+                                        change.text
+                                    );
+                                } else {
+                                    debug!("#{}: {:#?}", client_id, change.text);
+                                }
                             }
                         }
                         let msg = ServerMessage::Common(common_message);

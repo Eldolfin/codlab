@@ -1,3 +1,4 @@
+pub mod change;
 pub mod common;
 pub mod messages;
 pub mod peekable_channel;
@@ -5,7 +6,7 @@ pub mod peekable_channel;
 use std::collections::HashMap;
 
 use async_lsp::lsp_types::{
-    ApplyWorkspaceEditParams, DidChangeTextDocumentParams, TextEdit, WorkspaceEdit,
+    ApplyWorkspaceEditParams, DidChangeTextDocumentParams, Position, Range, TextEdit, WorkspaceEdit,
 };
 use tracing::warn;
 
@@ -22,14 +23,17 @@ pub fn change_event_to_workspace_edit(
                 event
                     .content_changes
                     .iter()
-                    .filter_map(|change| {
-                        if change.range.is_none() {
-                            warn!("Skipping change which has no range: {:?}", change);
-                        }
-                        Some(TextEdit {
-                            range: change.range?,
+                    .map(|change| {
+                        // if there is no range, just replace the whole document
+                        let range = change.range.unwrap_or(Range::new(
+                            Position::new(0, 0),
+                            // some editors might not like this
+                            Position::new(u32::MAX, u32::MAX),
+                        ));
+                        TextEdit {
+                            range,
                             new_text: change.text.clone(),
-                        })
+                        }
                     })
                     .collect(),
             )])),

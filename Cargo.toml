@@ -23,8 +23,10 @@ uuid = { version = "1.16.0", features = ["serde", "v4"] }
 [dev-dependencies]
 assert_cmd = "2.0.16"
 async-process = "2.3.0"
+pretty_assertions = "1.4.1"
 proptest = { version = "1.6.0", features = ["proptest-macro"] }
 proptest-derive = "0.5.1"
+rstest = "0.25.0"
 
 [profile.test.package.proptest]
 opt-level = 3

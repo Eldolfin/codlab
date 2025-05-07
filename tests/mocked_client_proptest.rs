@@ -3,43 +3,13 @@
 mod common;
 
 use assert_cmd::cargo::CommandCargoExt as _;
-use async_lsp::lsp_types::{
-    DidChangeTextDocumentParams, Position, Range, TextDocumentContentChangeEvent, Url,
-};
+use async_lsp::lsp_types::{DidChangeTextDocumentParams, TextDocumentContentChangeEvent, Url};
 use codlab::common::init_logger;
 use common::lsp_client;
 use proptest::collection::vec;
-use proptest::{prelude::Arbitrary, prop_compose, proptest, test_runner::TestRunner};
+use proptest::{prelude::Arbitrary, proptest, test_runner::TestRunner};
 use proptest_derive::Arbitrary;
 use std::{env::temp_dir, process::Command, time::Duration};
-
-const MAX_POSITION_SIZE: u32 = 1;
-const INPUT_REGEX: &str = "[a-z]{1,5}";
-
-prop_compose! {
-    fn arb_text_document_change()(
-        input      in INPUT_REGEX,
-        start_line in 0..MAX_POSITION_SIZE,
-        start_char in 0..MAX_POSITION_SIZE,
-        end_line   in 0..MAX_POSITION_SIZE,
-        end_char   in 0..MAX_POSITION_SIZE
-    ) -> TextDocumentContentChangeEvent {
-        TextDocumentContentChangeEvent {
-            range: Some(Range {
-                start: Position {
-                    line: start_line,
-                    character:start_char
-                },
-                end: Position { line:
-                    end_line, character:
-                    end_char
-                }
-            }),
-            range_length: None,
-            text: input,
-        }
-    }
-}
 
 #[derive(Debug, Arbitrary)]
 enum Client {
@@ -51,7 +21,7 @@ enum Client {
 #[derive(Debug, Arbitrary)]
 struct ClientChange {
     from: Client,
-    #[proptest(strategy = "vec(arb_text_document_change(), (1..10))")]
+    #[proptest(strategy = "vec(common::proptest_structs::arb_text_document_change(), (1..10))")]
     changes: Vec<TextDocumentContentChangeEvent>,
 }
 
