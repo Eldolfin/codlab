@@ -33,7 +33,9 @@ ci:
     printf "{{BLUE}}Running tests: {{YELLOW}}[$(echo "$TESTS" | paste -sd, -)]{{NORMAL}}\n"
     for test in $TESTS; do
         printf "{{BLUE}}Running test {{YELLOW}}%s{{NORMAL}}\n" "$test"
-        nix build -L .#checks.x86_64-linux.$test
+        if ! x=$(nix build -L .#checks.x86_64-linux.$test); then
+            echo "$test" >> {{CI_OUTPUT}}/failures
+        fi
         if [ "$test" != "pre-commit-check" ]; then
             printf "{{BLUE}}Concatenating videos of clients{{NORMAL}}\n"
             find result/client* -name '*.mkv' |
@@ -42,3 +44,10 @@ ci:
                 xargs ffmpeg -filter_complex vstack {{CI_OUTPUT}}/$test.mp4
         fi
     done
+    if [ -f {{CI_OUTPUT}}/failures ]; then
+        printf "{{RED}}{{BOLD}}SOME TESTS FAILED:{{NORMAL}}\n"
+        cat {{CI_OUTPUT}}/failures
+        exit 1
+    else
+        printf "{{GREEN}}{{BOLD}}ALL TESTS PASSED!{{NORMAL}}\n"
+    fi
