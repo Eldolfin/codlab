@@ -15,6 +15,7 @@ use async_lsp::{
 };
 use clap::Parser;
 use codlab::{
+    change::{self, ChangeEvent},
     change_event_to_workspace_edit,
     common::init_logger,
     messages::{Change, ClientMessage, CommonMessage, ServerMessage},
@@ -27,7 +28,6 @@ use std::{
         Arc,
         mpsc::{self, Sender},
     },
-    time::Instant,
 };
 use tokio::sync::Mutex;
 use tokio_tungstenite::{WebSocketStream, connect_async};
@@ -43,9 +43,9 @@ struct ServerState {
     #[allow(dead_code)]
     client: ClientSocket,
     codelab_server: Arc<Mutex<CodelabServer>>,
-    ignore_queue_recv: PeekableReceiver<ChangeEvent>,
-    ignore_queue_send: Sender<ChangeEvent>,
-    ignore_pool: Vec<ChangeEvent>,
+    ignore_queue_recv: PeekableReceiver<Vec<change::ChangeEvent>>,
+    ignore_queue_send: Sender<Vec<change::ChangeEvent>>,
+    ignore_pool: Vec<change::ChangeEvent>,
 }
 
 impl LanguageServer for ServerState {
@@ -61,7 +61,7 @@ impl LanguageServer for ServerState {
         Box::pin(async move {
             Ok(InitializeResult {
                 capabilities: ServerCapabilities {
-                    text_document_sync: Some(Kind(TextDocumentSyncKind::INCREMENTAL)),
+                    text_document_sync: Some(Kind(TextDocumentSyncKind::FULL)),
                     ..ServerCapabilities::default()
                 },
                 server_info: None,
@@ -83,26 +83,6 @@ impl LanguageServer for ServerState {
     }
 
     fn did_change(&mut self, params: DidChangeTextDocumentParams) -> Self::NotifyResult {
-        while let Ok(ignore) = self.ignore_queue_recv.try_recv() {
-            self.ignore_pool.push(ignore);
-        }
-        if let Some(i) = self
-            .ignore_pool
-            .iter()
-            .enumerate()
-            .find(|(_, change)| changes_eq(&change.change, &params))
-            .map(|(i, _)| i)
-        // if self
-        //     .ignore_queue_recv
-        //     .try_recv_peek()
-        //     .unwrap()
-        //     .is_some_and(|change| changes_eq(change, &params))
-        {
-            self.ignore_pool.remove(i);
-            // self.ignore_queue_recv.try_recv().unwrap();
-            info!("Ignoring next change as it was received");
-            return ControlFlow::Continue(());
-        }
         tokio::spawn({
             let send = self.codelab_server.clone();
             async move {
@@ -151,17 +131,6 @@ fn changes_eq(a: &DidChangeTextDocumentParams, b: &DidChangeTextDocumentParams) 
     eq
 }
 
-#[derive(Debug)]
-struct ChangeEvent {
-    change: DidChangeTextDocumentParams,
-}
-
-impl ChangeEvent {
-    fn new(change: DidChangeTextDocumentParams) -> Self {
-        Self { change }
-    }
-}
-
 impl ServerState {
     fn new_router(
         editor_client: ClientSocket,
@@ -180,9 +149,9 @@ impl ServerState {
         router
     }
 
-    fn on_change(&mut self, event: ChangeEvent) -> ControlFlow<async_lsp::Result<()>> {
+    fn on_change(&mut self, event: change::ChangeEvent) -> ControlFlow<async_lsp::Result<()>> {
         // we don't want to send what we just received otherwise we create an infinite loop between clients
-        self.ignore_queue_send.send(event).unwrap();
+        // self.ignore_queue_send.send(()).unwrap();
         ControlFlow::Continue(())
     }
 }
@@ -219,7 +188,7 @@ async fn main() -> anyhow::Result<()> {
                         ServerMessage::Common(common_message) => match common_message {
                             CommonMessage::Change(change) => {
                                 if client
-                                    .emit(ChangeEvent::new(change.change.clone()))
+                                    .emit(change::ChangeEvent::new(change.change.clone()))
                                     .is_err()
                                 {
                                     break;
@@ -229,11 +198,6 @@ async fn main() -> anyhow::Result<()> {
                                     .await
                                     .unwrap();
                                 debug!("client: applied remote edit successfully!");
-                                // client_send_msg(
-                                //     &send,
-                                //     &ClientMessage::AcknowledgeChange(change.id),
-                                // )
-                                // .await;
                             }
                         },
                     }
