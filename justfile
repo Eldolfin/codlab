@@ -35,10 +35,11 @@ ci:
         printf "{{BLUE}}Running test {{YELLOW}}%s{{NORMAL}}\n" "$test"
         if ! x=$(nix build -L .#checks.x86_64-linux.$test); then
             echo "$test" >> {{CI_OUTPUT}}/failures
-        elif ! x=$(diff result/client*/test.md); then
-            echo "$test" >> {{CI_OUTPUT}}/failures
         fi
         if [ "$test" != "pre-commit-check" ]; then
+            if ! x=$(diff result/client*/test.md); then
+                echo "$test" >> {{CI_OUTPUT}}/failures
+            fi
             printf "{{BLUE}}Concatenating videos of clients{{NORMAL}}\n"
             find result/client* -name '*.mkv' |
                 sort |

@@ -20,6 +20,7 @@ jobs:
         extraPullNames: nix-community
     - run: nix develop -c just ci
     - uses: actions/upload-artifact@v4
+      if: always()
       with:
         name: video-recordings
         path: ci-output
