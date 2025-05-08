@@ -23,6 +23,12 @@ jobs:
           mkdir mdbook
           curl -sSL "$url" | tar -xz --directory=./mdbook
           echo "$(pwd)/mdbook" >> "$GITHUB_PATH"
+      - name: Install mdbook-mermaid
+        run: |
+          url="https://github.com/badboy/mdbook-mermaid/releases/download/v0.15.0/mdbook-mermaid-v0.15.0-x86_64-unknown-linux-gnu.tar.gz"
+          mkdir mdbook-mermaid
+          curl -sSL "$url" | tar -xz --directory=./mdbook-mermaid
+          echo "$(pwd)/mdbook-mermaid" >> "$GITHUB_PATH"
       - name: Build Book
         run: |
           cd book
