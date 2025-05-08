@@ -8,3 +8,4 @@ result
 *.png
 *.mkv
 ci-output
+.pre-commit-config.yaml

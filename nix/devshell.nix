@@ -18,6 +18,7 @@ pkgs.mkShell {
     ffmpeg
     just
     mdbook
+    mdbook-mermaid
     vsce
     zellij
 
