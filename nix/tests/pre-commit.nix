@@ -26,6 +26,7 @@ pre-commit-hooks.lib.${system}.run {
       enable = true;
       settings.configuration = {
         MD013 = false; # line lenght check
+        MD034 = false; # bare links for demo video in readme
       };
     };
     nil.enable = true;
